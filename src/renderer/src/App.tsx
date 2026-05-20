@@ -1,8 +1,6 @@
-// src/App.tsx
-import React from 'react';
 import { CustomFlowCanvas } from './components/CustomFlowCanvas';
 import { Sidebar } from './components/Sidebar';
-import { PropertyPanel } from './components/PropertyPanel';
+import { PropertyPanel } from './components/property/PropertyPanel';
 import { CodePreviewModal } from './components/CodePreviewModal';
 import { useAppLogic } from './hooks/useAppLogic';
 
