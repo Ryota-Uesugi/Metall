@@ -22,7 +22,7 @@ interface CustomFlowCanvasProps {
 
 export const CustomFlowCanvas: React.FC<CustomFlowCanvasProps> = ({
   nodes, edges, onNodesChange, onConnect, isValidConnection,
-  onNodeClick, onEdgeClick, onEdgeContextMenu, onPaneClick, selectedNodeId, selectedEdgeId, viewMode
+  onNodeClick, onEdgeClick, onEdgeContextMenu, onPaneClick, selectedNodeId, viewMode
 }) => {
   
   // 切り出したインタラクションロジックを読み込む
