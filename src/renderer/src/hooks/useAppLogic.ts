@@ -97,15 +97,9 @@ export function useAppLogic() {
     }));
   }, [setCurrentNodes]);
 
-
-  // ==========================================
-  // タグ定義管理ロジック (インライン・コンテキストメニュー対応)
-  // ==========================================
-
   const addTagGroup = useCallback((groupName: string) => {
     setTagDefinitions((prev) => {
-      if (prev.some(t => t.groupName === groupName)) return prev; // 既存なら無視
-      // tagName が空文字のレコードを「空グループ」のプレースホルダーとして作成
+      if (prev.some(t => t.groupName === groupName)) return prev;
       return [...prev, { id: `tagdef_${Math.random().toString(36).substr(2, 5)}`, groupName, tagName: '', description: '' }];
     });
   }, [setTagDefinitions]);
@@ -119,7 +113,6 @@ export function useAppLogic() {
 
   const deleteTagGroup = useCallback((groupName: string) => {
     setTagDefinitions((prev) => prev.filter(t => t.groupName !== groupName));
-    // キャンバス上のPlaceノードで該当グループを割り当てているものをリセット
     setCurrentNodes(nds => nds.map(n => 
       n.type === 'placeNode' && n.data.assignedTagType === 'group' && n.data.assignedTargetName === groupName 
       ? { ...n, data: { ...n.data, assignedTagType: null, assignedTargetName: '', label: 'Tag' } } : n
@@ -132,13 +125,11 @@ export function useAppLogic() {
       const target = prev.find(t => t.id === tagId);
       if (target) deletedTagName = target.tagName;
       const next = prev.filter(t => t.id !== tagId);
-      // グループ内の最後のタグを消した際、グループ自体が消滅しないように空プレースホルダーを挿入
       if (target && !next.some(t => t.groupName === target.groupName)) {
         return [...next, { id: `tagdef_${Math.random().toString(36).substr(2, 5)}`, groupName: target.groupName, tagName: '', description: '' }];
       }
       return next;
     });
-    // キャンバス上のPlaceノードで該当タグを割り当てているものをリセット
     setCurrentNodes(nds => nds.map(n => 
       n.type === 'placeNode' && n.data.assignedTagType === 'tag' && n.data.assignedTargetName === deletedTagName 
       ? { ...n, data: { ...n.data, assignedTagType: null, assignedTargetName: '', label: 'Tag' } } : n
@@ -148,9 +139,6 @@ export function useAppLogic() {
   const updateTagDescription = useCallback((tagId: string, description: string) => {
     setTagDefinitions((prev) => prev.map(t => t.id === tagId ? { ...t, description } : t));
   }, [setTagDefinitions]);
-
-  // ==========================================
-
 
   const updateSelectedNode = useCallback((field: keyof NodeData, value: unknown) => {
     setCurrentNodes((nds) => nds.map((n) => {
@@ -260,7 +248,7 @@ export function useAppLogic() {
     activeTab, isClassTab, isPetriTab, viewMode, setViewMode, depthLimit, setDepthLimit, previewCode, setPreviewCode,
     displayNodes, displayEdges, selectedNodeId, selectedEdgeId, selectedNode, selectedEdge,
     editingAttrId, setEditingAttrId, availableEvents, functionNodes, currentNodes, currentEdges, setCurrentNodes,
-    tagDefinitions,
+    tagDefinitions, nodes, // ★ nodes を追加
     addTagGroup, addTagDefinition, deleteTagGroup, deleteTagDefinition, updateTagDescription,
     handleTabSwitch, onPaneClick, onNodeClick, onEdgeClick, onEdgeContextMenu, onAssignEvent,
     isValidConnection, onConnect, reverseSelectedEdge, deleteSelectedElement,

@@ -1,3 +1,4 @@
+// src/App.tsx
 import { CustomFlowCanvas } from './components/CustomFlowCanvas';
 import { Sidebar } from './components/Sidebar';
 import { PropertyPanel } from './components/PropertyPanel';
@@ -9,7 +10,7 @@ export default function App() {
     activeTab, isClassTab, viewMode, setViewMode, depthLimit, setDepthLimit, previewCode, setPreviewCode,
     displayNodes, displayEdges, selectedNodeId, selectedEdgeId, selectedNode, selectedEdge,
     editingAttrId, setEditingAttrId, availableEvents, functionNodes, currentNodes, currentEdges,
-    tagDefinitions, addTagGroup, addTagDefinition, deleteTagGroup, deleteTagDefinition, updateTagDescription,
+    tagDefinitions, nodes, addTagGroup, addTagDefinition, deleteTagGroup, deleteTagDefinition, updateTagDescription,
     setCurrentNodes, handleTabSwitch, onPaneClick, onNodeClick, onEdgeClick, onEdgeContextMenu, onAssignEvent,
     isValidConnection, onConnect, reverseSelectedEdge, deleteSelectedElement,
     addNode, addPetriNode, updateSelectedNode, updateSelectedEdge,
@@ -39,7 +40,6 @@ export default function App() {
         onSave={handleSave}
         onLoad={handleLoad}
         onGenerateCode={handleGenerateCode}
-        
         tagDefinitions={tagDefinitions}
         onAddTagGroup={addTagGroup}
         onAddTagDefinition={addTagDefinition}
@@ -108,6 +108,7 @@ export default function App() {
         onAssignEvent={onAssignEvent}
         nodes={currentNodes}
         edges={currentEdges}
+        classNodes={nodes} // ★ 新規追加: 全クラスノードを渡す
         tagDefinitions={tagDefinitions}
       />
     </div>

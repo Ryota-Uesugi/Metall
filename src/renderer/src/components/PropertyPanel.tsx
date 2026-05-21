@@ -1,6 +1,6 @@
 // src/components/PropertyPanel.tsx
 import React, { useMemo } from 'react';
-import type { Node, Edge, NodeData, TagDefinition } from '../model/graphTypes';
+import type { Node, Edge, NodeData, TagDefinition, MethodArg } from '../model/graphTypes';
 import { ATTRIBUTE_MAP, TYPE_OPTIONS } from '../constants';
 import { usePropertyPanelLogic } from '../hooks/usePropertyPanelLogic';
 import { MethodArgsEditor } from './property/MethodArgsEditor';
@@ -24,6 +24,7 @@ interface PropertyPanelProps {
   onAssignEvent: (transitionId: string, functionId: string | null) => void;
   nodes: Node[];
   edges: Edge[];
+  classNodes: Node[]; // ★ 追加
   tagDefinitions: TagDefinition[];
 }
 
@@ -37,30 +38,38 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
   const {
     activeTab, selectedNode, selectedEdge, editingAttrId, setEditingAttrId,
     updateSelectedNode, updateSelectedEdge, addAttribute, removeAttribute, updateAttrParam,
-    deleteSelectedElement, reverseSelectedEdge, functionNodes, onAssignEvent, nodes, edges, tagDefinitions
+    deleteSelectedElement, reverseSelectedEdge, functionNodes, onAssignEvent, nodes, edges, classNodes, tagDefinitions
   } = props;
 
-const {
-    isClassTab, isPetriTab, currentAttributes, inConnections, outConnections, validInNodes, inNodeTypes,
-    currentArgs, nameLabel, availableRoles, getNodeInfo, addArg, removeArg, updateArg
+  const {
+    isClassTab, isPetriTab, currentAttributes, inConnections, outConnections,
+    validInNodes, inNodeTypes, currentArgs, nameLabel, availableRoles, getNodeInfo, 
+    addArg, removeArg, updateArg
   } = usePropertyPanelLogic({ activeTab, selectedNode, selectedEdge, nodes, edges, updateSelectedNode });
 
   const currentAvailableAttributes = selectedNode ? (ATTRIBUTE_MAP[selectedNode.data.kind as string] ?? []) : [];
   const currentTypeDetail = (selectedNode?.data.typeDetail as string) || '';
 
-  const uniqueGroupNames = useMemo(() => Array.from(new Set(tagDefinitions.map(t => t.groupName))), [tagDefinitions]);
+  // タグをエクスプローラーと同等の階層関係にデータ整形
+  const compiledGroupedTags = useMemo(() => {
+    const map: Record<string, TagDefinition[]> = {};
+    tagDefinitions.forEach((tag) => {
+      if (!map[tag.groupName]) map[tag.groupName] = [];
+      if (tag.tagName !== '') map[tag.groupName].push(tag);
+    });
+    return map;
+  }, [tagDefinitions]);
 
   const handleTagAssignmentChange = (selectedValue: string) => {
     if (!selectedValue) {
       updateSelectedNode('assignedTagType', null);
       updateSelectedNode('assignedTargetName', '');
-      updateSelectedNode('label', 'Tag'); // 未設定時のデフォルト
+      updateSelectedNode('label', 'Tag');
       return;
     }
     const [type, name] = selectedValue.split('::');
     updateSelectedNode('assignedTagType', type);
     updateSelectedNode('assignedTargetName', name);
-    // 自動的にノードの名前も連動して書き換える（自由入力を禁止するため）
     updateSelectedNode('label', type === 'group' ? `📦 ${name}` : `🏷️ ${name}`);
   };
 
@@ -79,7 +88,6 @@ const {
           {/* 基本情報：名前 */}
           <div>
             <label style={styles.label}>{nameLabel}</label>
-            {/* ★ Placeノードの場合は手動入力を廃止し、システムが設定した名前をRead-Onlyで表示する */}
             {isPetriTab && selectedNode.type === 'placeNode' ? (
                 <div style={{ ...styles.input, background: '#f1f3f5', color: '#6c757d', cursor: 'not-allowed' }}>
                     {selectedNode.data.label as string}
@@ -89,27 +97,28 @@ const {
             )}
           </div>
 
-          {/* ペトリネットのPlaceに対するグループ or タグの割当UI */}
+          {/* ペトリネットのPlaceに対するエクスプローラー木構造を模した割当UI */}
           {isPetriTab && selectedNode.type === 'placeNode' && (
             <div style={{ padding: '10px', background: '#e7f3ff', border: '1px solid #b8daff', borderRadius: '4px' }}>
               <label style={{ ...styles.label, color: '#004085' }}>🔗 グループ / タグ の割り当て</label>
               <select style={styles.input} value={currentSelectValue} onChange={(e) => handleTagAssignmentChange(e.target.value)}>
                 <option value="">--- 未割り当て (Any) ---</option>
-                {uniqueGroupNames.length > 0 && (
-                  <optgroup label="📦 グループ単位で指定 (全状態を許容)">
-                    {uniqueGroupNames.map(group => <option key={`g-${group}`} value={`group::${group}`}>{group} (グループ全体)</option>)}
-                  </optgroup>
-                )}
-                {tagDefinitions.length > 0 && (
-                  <optgroup label="🏷️ 個別タグ単位で指定 (単一状態のみ)">
-                    {tagDefinitions.map(t => <option key={`t-${t.id}`} value={`tag::${t.tagName}`}>{t.groupName} ➔ {t.tagName}</option>)}
-                  </optgroup>
-                )}
+                
+                {Object.entries(compiledGroupedTags).map(([groupName, tags]) => (
+                  <React.Fragment key={groupName}>
+                    <option value={`group::${groupName}`}>📦 {groupName} (グループ全体)</option>
+                    {tags.map(t => (
+                      <option key={t.id} value={`tag::${t.tagName}`}>
+                        &nbsp;&nbsp;&nbsp;&nbsp;🏷️ {t.tagName}
+                      </option>
+                    ))}
+                  </React.Fragment>
+                ))}
               </select>
             </div>
           )}
 
-          {/* ★ ペトリネット：プレースの型設定（手動選択を廃止し、自動同期結果のみ表示） */}
+          {/* ペトリネット：プレースの型設定（自動同期） */}
           {isPetriTab && selectedNode.type === 'placeNode' && (
             <div style={{ padding: '10px', background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '4px' }}>
               <label style={styles.label}>プレースの型 (Type)</label>
@@ -138,7 +147,7 @@ const {
             <MethodArgsEditor currentArgs={currentArgs} inNodeTypes={inNodeTypes} validInNodes={validInNodes} addArg={addArg} removeArg={removeArg} updateArg={updateArg} updateSelectedNode={updateSelectedNode} styles={styles} />
           )}
 
-          {/* クラス図：戻り値/型 (こちらはクラス設計用なので手動選択を残す) */}
+          {/* クラス図：戻り値/型 */}
           {isClassTab && selectedNode.type === 'blockNode' && selectedNode.data.kind !== 'constant' && (
             <div>
               <label style={styles.label}>型 / 戻り値</label>
@@ -154,16 +163,72 @@ const {
             <AttributeEditor currentAttributes={currentAttributes} currentAvailableAttributes={currentAvailableAttributes} editingAttrId={editingAttrId} setEditingAttrId={setEditingAttrId} addAttribute={addAttribute} removeAttribute={removeAttribute} updateAttrParam={updateAttrParam} styles={styles} />
           )}
 
-          {/* ペトリネット：トランジションの関数割り当て */}
-          {isPetriTab && selectedNode.type === 'transitionNode' && (
-            <div>
-              <label style={styles.label}>割り当てる関数</label>
-              <select style={styles.input} value={(selectedNode.data.boundFunctionId as string) ?? ''} onChange={(e) => onAssignEvent(selectedNode.id, e.target.value || null)}>
-                <option value="">--- なし ---</option>
-                {functionNodes.map((fn) => <option key={fn.id} value={fn.id}>{fn.data.label as string} ({fn.parentId ? '子' : 'ルート'})</option>)}
-              </select>
-            </div>
-          )}
+          {/* ★ ペトリネット：トランジションの関数割り当て ＆ 割り当て関数の詳細表示 */}
+          {isPetriTab && selectedNode.type === 'transitionNode' && (() => {
+            const boundFunc = functionNodes.find(fn => fn.id === selectedNode.data.boundFunctionId);
+            const argsList = (boundFunc?.data.args as MethodArg[]) || [];
+            
+            // ★ classNodes から親クラスを検索するように修正
+            const parentContainer = boundFunc?.parentId 
+              ? classNodes.find(n => n.id === boundFunc.parentId) 
+              : null;
+
+            // 所属クラス.関数名 の形式を生成 (所属がない場合は関数名のみ)
+            const fullFunctionName = parentContainer 
+              ? `${parentContainer.data.label}.${boundFunc?.data.label}` 
+              : (boundFunc?.data.label as string);
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <label style={styles.label}>割り当てる関数</label>
+                  <select style={styles.input} value={(selectedNode.data.boundFunctionId as string) ?? ''} onChange={(e) => onAssignEvent(selectedNode.id, e.target.value || null)}>
+                    <option value="">--- なし ---</option>
+                    {functionNodes.map((fn) => {
+                      // ★ セレクトボックス内も classNodes から親クラスを検索
+                      const parent = fn.parentId ? classNodes.find(n => n.id === fn.parentId) : null;
+                      const displayName = parent ? `${parent.data.label}.${fn.data.label}` : String(fn.data.label);
+                      return (
+                        <option key={fn.id} value={fn.id}>
+                          {displayName}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* 割り当てられている関数の情報を展開するパネル */}
+                {boundFunc && (
+                  <div style={{ padding: '10px', background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '4px', fontSize: '12px' }}>
+                    <div style={{ fontWeight: 'bold', color: '#2f9e44', marginBottom: '6px', borderBottom: '1px solid #e9ecef', paddingBottom: '2px' }}>
+                      📋 割り当て関数の詳細仕様
+                    </div>
+                    
+                    <div style={{ marginBottom: '4px', wordBreak: 'break-all' }}>
+                      <strong>関数名:</strong> <span style={{ color: '#e64980', fontWeight: 'bold' }}>{fullFunctionName}</span>
+                    </div>
+                    <div style={{ marginBottom: '4px' }}>
+                      <strong>戻り値の型:</strong> <span style={{ color: (boundFunc.data.typeDetail as string) === 'void' ? '#868e96' : '#007bff', fontWeight: 'bold' }}>{(boundFunc.data.typeDetail as string) || 'void'}</span>
+                    </div>
+                    <div>
+                      <strong>引数の構成:</strong>
+                      {argsList.length === 0 ? (
+                        <span style={{ color: '#868e96', marginLeft: '5px', fontStyle: 'italic' }}>引数なし (void)</span>
+                      ) : (
+                        <ul style={{ margin: '4px 0 0 0', paddingLeft: '18px', color: '#495057', listStyleType: 'square' }}>
+                          {argsList.map(arg => (
+                            <li key={arg.id} style={{ marginBottom: '2px' }}>
+                              <span>{arg.name}</span>: <strong style={{ color: '#007bff' }}>{arg.type}</strong>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* 共通：接続状況表示 */}
           <div style={{ borderTop: '1px solid #dee2e6', paddingTop: '15px', marginTop: 'auto' }}>
