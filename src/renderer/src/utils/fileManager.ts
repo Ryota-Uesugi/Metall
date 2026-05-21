@@ -1,9 +1,15 @@
 // src/utils/fileManager.ts
-import type { Node, Edge, ProjectFile } from '../model/graphTypes';
+import type { Node, Edge, ProjectFile, TagDefinition } from '../model/graphTypes';
 import { downloadText, deserializeProject, serializeProject } from './projectIO';
 
-export const saveProjectFile = (nodes: Node[], edges: Edge[], petriNodes: Node[], petriEdges: Edge[]) => {
-  const data: ProjectFile = { nodes, edges, petriNodes, petriEdges };
+export const saveProjectFile = (
+  nodes: Node[], 
+  edges: Edge[], 
+  petriNodes: Node[], 
+  petriEdges: Edge[],
+  tagDefinitions: TagDefinition[] // ★ 追加: 5つ目の引数として受け取る
+) => {
+  const data: ProjectFile = { nodes, edges, petriNodes, petriEdges, tagDefinitions };
   downloadText('boxyh_project.json', serializeProject(data), 'application/json');
 };
 

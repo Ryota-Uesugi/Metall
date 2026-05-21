@@ -1,6 +1,6 @@
-import React, { useRef } from 'react';
-
-export type ViewMode = 'all' | 'no-dependency' | 'depth';
+// src/components/Sidebar.tsx
+import React, { useRef, useMemo } from 'react';
+import type { TagDefinition } from '../model/graphTypes';
 
 interface SidebarProps {
   activeTab: 'class' | 'petri';
@@ -14,14 +14,31 @@ interface SidebarProps {
   onSave: () => void;
   onLoad: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onGenerateCode: () => void;
+  
+  // ★ 追加
+  tagDefinitions: TagDefinition[];
+  onOpenTagModal: () => void;
 }
 
 const sideBtn = { width: '100%', padding: '8px 10px', marginBottom: '10px', cursor: 'pointer', borderRadius: '4px', border: '1px solid #ced4da', fontSize: '13px' };
 
 export const Sidebar: React.FC<SidebarProps> = ({
-    activeTab, handleTabSwitch, onAddNode, onAddPetriNode, selectedNodeId, selectedNodeKind, selectedNodeLabel, selectedNodeType, onSave, onLoad, onGenerateCode
+    activeTab, handleTabSwitch, onAddNode, onAddPetriNode, selectedNodeId, selectedNodeKind, selectedNodeLabel, selectedNodeType, onSave, onLoad, onGenerateCode,
+    tagDefinitions, onOpenTagModal // ★ 受け取り
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // ★ 作成されたタグをグループ名ごとにグルーピングする処理
+    const groupedTags = useMemo(() => {
+        const map: Record<string, TagDefinition[]> = {};
+        tagDefinitions.forEach((tag) => {
+            if (!map[tag.groupName]) {
+                map[tag.groupName] = [];
+            }
+            map[tag.groupName].push(tag);
+        });
+        return map;
+    }, [tagDefinitions]);
 
     return (
         <div style={{ width: '220px', background: '#f8f9fa', borderRight: '1px solid #dee2e6', display: 'flex', flexDirection: 'column', zIndex: 10 }}>
@@ -43,7 +60,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {selectedNodeType === 'groupNode' && (
                         <div style={{ background: '#e7f3ff', padding: '10px', borderRadius: '4px', marginTop: '10px' }}>
                         <p style={{ fontSize: '10px', margin: '0 0 5px 0', fontWeight: 'bold' }}>{selectedNodeLabel} 内に追加:</p>
-                        {/* 修正箇所: Enum選択時も変数を追加できるように変更 */}
                         {selectedNodeKind === 'enum' ? (
                             <button onClick={() => onAddNode('blockNode', 'variable', selectedNodeId!)} style={{ ...sideBtn, background: '#fff', borderColor: '#007bff' }}>＋ 変数</button>
                         ) : (
@@ -57,11 +73,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </>
                 ) : (
                     <>
+                    <button onClick={() => onOpenTagModal()} style={{ ...sideBtn, background: '#e7f3ff', color: '#007bff', borderColor: '#007bff', fontWeight: 'bold' }}>＋ タグ定義を作成</button>
+                    <div style={{ height: '5px' }} />
                     <button onClick={() => onAddPetriNode('placeNode')} style={sideBtn}>＋ 場所 (Place / タグ)</button>
                     <button onClick={() => onAddPetriNode('transitionNode')} style={sideBtn}>＋ トランジション (発火)</button>
                     </>
                 )}
                 </div>
+
+                {/* ★ タグ管理タブの時にグループ化されたタグ一覧を表示する領域 */}
+                {activeTab === 'petri' && (
+                    <div style={{ marginTop: '15px' }}>
+                        <h4 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#495057', borderBottom: '1px solid #dee2e6', paddingBottom: '4px' }}>登録済みのタグ一覧</h4>
+                        {Object.keys(groupedTags).length === 0 ? (
+                            <div style={{ fontSize: '11px', color: '#adb5bd', fontStyle: 'italic' }}>タグ定義がありません</div>
+                        ) : (
+                            Object.entries(groupedTags).map(([group, tags]) => (
+                                <div key={group} style={{ marginBottom: '12px', background: '#fff', border: '1px solid #e9ecef', borderRadius: '4px', padding: '6px' }}>
+                                    <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#495057', display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px solid #f1f3f5', paddingBottom: '2px', marginBottom: '4px' }}>
+                                        📦 {group} <span style={{ fontSize: '9px', fontWeight: 'normal', color: '#868e96' }}>({tags.length})</span>
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                        {tags.map((t) => (
+                                            <span 
+                                                key={t.id} 
+                                                title={t.description || '補足なし'} 
+                                                style={{ fontSize: '10px', background: '#e8f4fd', color: '#0056b3', padding: '2px 6px', borderRadius: '3px', border: '1px solid #d0e7fc', cursor: 'help' }}
+                                            >
+                                                🏷️ {t.tagName}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                )}
 
                 <div style={{ display: 'flex', gap: '5px', marginBottom: '15px' }}>
                 <button onClick={onSave} style={{ ...sideBtn, flex: 1, fontSize: '11px', background: '#e9ecef' }}>💾 保存</button>

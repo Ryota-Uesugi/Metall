@@ -1,13 +1,19 @@
+// src/model/graphTypes.ts
 import type { CSSProperties } from 'react';
 
 export type Position = { x: number; y: number };
-
 export type NodeType = 'groupNode' | 'blockNode' | 'placeNode' | 'transitionNode';
-
 export type ClassKind = 'class' | 'struct' | 'enum' | 'method' | 'variable' | 'constant';
 export type NodeKind = ClassKind | 'placeNode' | 'transitionNode' | (string & {});
-
 export type MethodArg = { id: string; type: string; name: string };
+
+// ★ 新設: タグ定義（マスターデータ）の型
+export type TagDefinition = {
+    id: string;
+    groupName: string; // グループ名
+    tagName: string;   // タグ名
+    description: string; // 自由記述の補足
+};
 
 export type AttributeType =
     | '@Inject'
@@ -39,10 +45,13 @@ export type NodeData = {
     isPrivate?: boolean;
     args?: MethodArg[];
     boundFunctionId?: string | null;
+    
+    // ★ 追加: PlaceNodeが割り当てているタグの情報
+    assignedTagType?: 'group' | 'tag' | null; // グループ単位か、個別タグ単位か
+    assignedTargetName?: string;             // 割り当てられたグループ名またはタグ名
+    
     [key: string]: unknown;
 };
-
-
 
 export type Node = {
     id: string;
@@ -55,7 +64,6 @@ export type Node = {
     style?: CSSProperties;
 };
 
-
 export type EdgeStyle = {
     opacity?: number;
     stroke?: string;
@@ -66,7 +74,6 @@ export type EdgeStyle = {
     [key: string]: any;
 };
 
-
 export type EdgeLabelStyle = {
     fill?: string;
     fontSize?: number;
@@ -74,7 +81,6 @@ export type EdgeLabelStyle = {
     opacity?: number;
     [key: string]: any;
 };
-
 
 export type EdgeRole =
     | 'association'
@@ -91,27 +97,27 @@ export type EdgeRole =
     | 'petri_flow'
     | (string & {});
 
-
 export type Edge = {
     id: string;
     source: string;
     target: string;
-    data?: { role?: EdgeRole;[k: string]: unknown };
+    data?: { role?: EdgeRole; [k: string]: unknown };
     style?: EdgeStyle;
     animated?: boolean;
     label?: string;
     labelStyle?: EdgeLabelStyle;
 };
 
-
 export type Connection = {
     source: string;
     target: string;
 };
 
+// ★ 拡張: 保存ファイルにタグ定義のリストを含める
 export type ProjectFile = {
     nodes: Node[];
     edges: Edge[];
     petriNodes: Node[];
     petriEdges: Edge[];
+    tagDefinitions: TagDefinition[]; // 追加
 };

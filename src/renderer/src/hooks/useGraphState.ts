@@ -1,6 +1,6 @@
 // src/hooks/useGraphState.ts
 import { useCallback, useState } from 'react';
-import type { Node, Edge } from '../model/graphTypes';
+import type { Node, Edge, TagDefinition } from '../model/graphTypes';
 
 export function useGraphState() {
   const [activeTab, setActiveTab] = useState<'class' | 'petri'>('class');
@@ -9,6 +9,9 @@ export function useGraphState() {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [petriNodes, setPetriNodes] = useState<Node[]>([]);
   const [petriEdges, setPetriEdges] = useState<Edge[]>([]);
+  
+  // ★ 新設: タグ定義（マスターデータ）の配列
+  const [tagDefinitions, setTagDefinitions] = useState<TagDefinition[]>([]);
 
   const currentNodes = activeTab === 'class' ? nodes : petriNodes;
   const currentEdges = activeTab === 'class' ? edges : petriEdges;
@@ -28,6 +31,7 @@ export function useGraphState() {
     setEdges([]);
     setPetriNodes([]);
     setPetriEdges([]);
+    setTagDefinitions([]); // ★ 追加
   }, []);
 
   return {
@@ -35,6 +39,7 @@ export function useGraphState() {
     nodes, setNodes, edges, setEdges,
     petriNodes, setPetriNodes, petriEdges, setPetriEdges,
     currentNodes, currentEdges, setCurrentNodes, setCurrentEdges,
+    tagDefinitions, setTagDefinitions, // ★ 外部へ露出
     resetAll,
   };
 }

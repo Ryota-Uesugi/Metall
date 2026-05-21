@@ -21,7 +21,13 @@ export function deserializeProject(json: string): ProjectFile {
       edges: parsed?.edges && isArray(parsed.edges) ? parsed.edges : [],
       petriNodes: parsed?.petriNodes && isArray(parsed.petriNodes) ? parsed.petriNodes : [],
       petriEdges: parsed?.petriEdges && isArray(parsed.petriEdges) ? parsed.petriEdges : [],
+      tagDefinitions: parsed?.tagDefinitions && isArray(parsed.tagDefinitions) ? parsed.tagDefinitions : [], // ★ 追加
     };
+  }
+
+  // 比較的新しい形式でも、tagDefinitionsがなければ空配列を補償
+  if (!parsed.tagDefinitions) {
+    parsed.tagDefinitions = [];
   }
 
   return parsed;

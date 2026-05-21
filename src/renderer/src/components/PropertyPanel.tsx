@@ -1,10 +1,10 @@
 // src/components/PropertyPanel.tsx
-import React from 'react';
-import type { Node, Edge, NodeData } from '../../model/graphTypes';
-import { ATTRIBUTE_MAP, TYPE_OPTIONS } from '../../constants';
-import { usePropertyPanelLogic } from '../../hooks/usePropertyPanelLogic';
-import { MethodArgsEditor } from './MethodArgsEditor';
-import { AttributeEditor } from './AttributeEditor';
+import React, { useMemo } from 'react';
+import type { Node, Edge, NodeData, TagDefinition } from '../model/graphTypes';
+import { ATTRIBUTE_MAP, TYPE_OPTIONS } from '../constants';
+import { usePropertyPanelLogic } from '../hooks/usePropertyPanelLogic';
+import { MethodArgsEditor } from './property/MethodArgsEditor';
+import { AttributeEditor } from './property/AttributeEditor';
 
 interface PropertyPanelProps {
   activeTab: 'class' | 'petri';
@@ -24,9 +24,11 @@ interface PropertyPanelProps {
   onAssignEvent: (transitionId: string, functionId: string | null) => void;
   nodes: Node[];
   edges: Edge[];
+  
+  // ★ 追加
+  tagDefinitions: TagDefinition[];
 }
 
-// 共通スタイル定義
 const styles = {
   btn: { width: '100%', padding: '8px 10px', marginBottom: '10px', cursor: 'pointer', borderRadius: '4px', border: '1px solid #ced4da', fontSize: '13px' },
   label: { display: 'block', fontSize: '12px', fontWeight: 'bold' as const, marginBottom: '4px', color: '#495057' },
@@ -37,7 +39,8 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
   const {
     activeTab, selectedNode, selectedEdge, editingAttrId, setEditingAttrId,
     updateSelectedNode, updateSelectedEdge, addAttribute, removeAttribute, updateAttrParam,
-    deleteSelectedElement, reverseSelectedEdge, functionNodes, onAssignEvent, nodes, edges
+    deleteSelectedElement, reverseSelectedEdge, functionNodes, onAssignEvent, nodes, edges,
+    tagDefinitions // ★ 受け取り
   } = props;
 
   const {
@@ -48,6 +51,34 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
   const currentAvailableAttributes = selectedNode ? (ATTRIBUTE_MAP[selectedNode.data.kind as string] ?? []) : [];
   const isManuallySet = Boolean(selectedNode?.data.isTypeManuallySet);
   const currentTypeDetail = (selectedNode?.data.typeDetail as string) || '';
+
+  // ★ セレクトボックス用に、存在するユニークなグループ一覧を展開
+  const uniqueGroupNames = useMemo(() => {
+    return Array.from(new Set(tagDefinitions.map(t => t.groupName)));
+  }, [tagDefinitions]);
+
+  // ★ 割り当てるタグ情報の変更ハンドラ
+  const handleTagAssignmentChange = (selectedValue: string) => {
+    if (!selectedValue) {
+      updateSelectedNode('assignedTagType', null);
+      updateSelectedNode('assignedTargetName', '');
+      updateSelectedNode('label', 'Tag'); // 未設定時のデフォルトラベル
+      return;
+    }
+
+    const [type, name] = selectedValue.split('::');
+    updateSelectedNode('assignedTagType', type);
+    updateSelectedNode('assignedTargetName', name);
+    
+    // Canvas上の視認性を高めるため、選択されたグループ名またはタグ名をそのままノードのlabelに同期
+    updateSelectedNode('label', type === 'group' ? `📦 ${name}` : `🏷️ ${name}`);
+  };
+
+  // 現在のセレクトボックスの選択値を計算
+  const currentSelectValue = useMemo(() => {
+    if (!selectedNode?.data.assignedTagType || !selectedNode?.data.assignedTargetName) return '';
+    return `${selectedNode.data.assignedTagType}::${selectedNode.data.assignedTargetName}`;
+  }, [selectedNode]);
 
   return (
     <div style={{ width: '280px', background: '#fff', padding: '15px', borderLeft: '1px solid #dee2e6', overflowY: 'auto', zIndex: 10, display: 'flex', flexDirection: 'column' }}>
@@ -60,6 +91,39 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
             <label style={styles.label}>{nameLabel}</label>
             <input style={styles.input} value={selectedNode.data.label as string} onChange={(e) => updateSelectedNode('label', e.target.value)} />
           </div>
+
+          {/* ★ 新設: ペトリネットのPlace（場所）に対するグループ or タグの割当UI */}
+          {isPetriTab && selectedNode.type === 'placeNode' && (
+            <div style={{ padding: '10px', background: '#e7f3ff', border: '1px solid #b8daff', borderRadius: '4px' }}>
+              <label style={{ ...styles.label, color: '#004085' }}>🔗 グループ / タグ の割り当て</label>
+              <select
+                style={styles.input}
+                value={currentSelectValue}
+                onChange={(e) => handleTagAssignmentChange(e.target.value)}
+              >
+                <option value="">--- 未割り当て (Any) ---</option>
+                
+                {uniqueGroupNames.length > 0 && (
+                  <optgroup label="📦 グループ単位で指定 (全状態を許容)">
+                    {uniqueGroupNames.map(group => (
+                      <option key={`g-${group}`} value={`group::${group}`}>{group} (グループ全体)</option>
+                    ))}
+                  </optgroup>
+                )}
+
+                {tagDefinitions.length > 0 && (
+                  <optgroup label="🏷️ 個別タグ単位で指定 (単一状態のみ)">
+                    {tagDefinitions.map(t => (
+                      <option key={`t-${t.id}`} value={`tag::${t.tagName}`}>{t.groupName} ➔ {t.tagName}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              <div style={{ fontSize: '10px', color: '#6c757d', marginTop: '6px' }}>
+                ※設定するとCanvas上のノード名が連動して自動更新されます。
+              </div>
+            </div>
+          )}
 
           {/* ペトリネット：プレースの型設定 */}
           {isPetriTab && selectedNode.type === 'placeNode' && (
@@ -86,7 +150,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
             </div>
           )}
 
-          {/* クラス図：引数エディタ (分離したコンポーネント) */}
+          {/* クラス図：引数エディタ */}
           {selectedNode.type === 'blockNode' && selectedNode.data.kind === 'method' && (
             <MethodArgsEditor
               currentArgs={currentArgs} inNodeTypes={inNodeTypes} validInNodes={validInNodes}
@@ -109,7 +173,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
             </div>
           )}
 
-          {/* クラス図：属性(@)エディタ (分離したコンポーネント) */}
+          {/* クラス図：属性(@)エディタ */}
           {isClassTab && selectedNode.data.kind !== 'constant' && (
             <AttributeEditor
               currentAttributes={currentAttributes} currentAvailableAttributes={currentAvailableAttributes}

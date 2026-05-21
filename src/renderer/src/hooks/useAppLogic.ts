@@ -1,6 +1,6 @@
 // src/hooks/useAppLogic.ts
 import { useCallback, useMemo, useState } from 'react';
-import type { Node, Edge, Connection, NodeData } from '../model/graphTypes';
+import type { Node, Edge, Connection, NodeData, TagDefinition } from '../model/graphTypes';
 import { generateBoxyhCode } from '../utils/codeGenerator';
 import { saveProjectFile, loadProjectFile } from '../utils/fileManager';
 import { useGraphState } from './useGraphState';
@@ -9,12 +9,12 @@ import { useGraphAutomations } from './useGraphAutomations';
 import { useGraphView } from './useGraphView';
 
 export function useAppLogic() {
-  // 1. 基本状態の管理
   const {
     activeTab, setActiveTab,
     nodes, setNodes, edges, setEdges,
     petriNodes, setPetriNodes, petriEdges, setPetriEdges,
     currentNodes, currentEdges, setCurrentNodes, setCurrentEdges,
+    tagDefinitions, setTagDefinitions // ★ 状態の取得
   } = useGraphState();
 
   const {
@@ -23,42 +23,37 @@ export function useAppLogic() {
   } = useSelection();
 
   const [previewCode, setPreviewCode] = useState<string | null>(null);
+  
+  // ★ 新設: タグ作成モーダルの表示状態
+  const [isTagModalOpen, setIsTagModalOpen] = useState(false);
 
   const isClassTab = activeTab === 'class';
   const isPetriTab = activeTab === 'petri';
 
-  // 2. ドメインロジックの適用 (属性自動付与・型同期)
   useGraphAutomations({
     isClassTab, nodes, edges, petriNodes, petriEdges, setNodes, setPetriNodes
   });
 
-  // 3. ビュー・表示関連の計算 (深度表示・エラー検証)
   const { 
     viewMode, setViewMode, depthLimit, setDepthLimit, displayNodes, displayEdges 
   } = useGraphView({
     isClassTab, isPetriTab, selectedNodeId, selectedEdgeId, currentNodes, currentEdges, nodes
   });
 
-  // ==========================================
-  // イベントハンドラ群
-  // ==========================================
-  
   const handleTabSwitch = useCallback((tab: 'class' | 'petri') => {
     setActiveTab(tab);
     clearSelection();
   }, [setActiveTab, clearSelection]);
 
-  const onNodeClick = useCallback((e: React.MouseEvent, node: Node) => selectNode(node.id), [selectNode]);
-  const onEdgeClick = useCallback((e: React.MouseEvent, edge: Edge) => selectEdge(edge.id), [selectEdge]);
-  const onPaneClick = useCallback(() => { /* Canvasクリック時のリセット等将来用 */ }, []);
+const onNodeClick = useCallback((_e: React.MouseEvent, node: Node) => selectNode(node.id), [selectNode]);
+  const onEdgeClick = useCallback((_e: React.MouseEvent, edge: Edge) => selectEdge(edge.id), [selectEdge]);
+  const onPaneClick = useCallback(() => {}, []);
 
   const isValidConnection = useCallback((connection: Connection) => {
     const s = currentNodes.find((n) => n.id === connection.source);
     const t = currentNodes.find((n) => n.id === connection.target);
     if (!s || !t) return false;
-
     if (isClassTab) return true;
-    // ペトリネットの接続ルール：Place -> Transition または Transition -> Place のみ許可
     return (s.type === 'placeNode' && t.type === 'transitionNode') || 
            (s.type === 'transitionNode' && t.type === 'placeNode');
   }, [currentNodes, isClassTab]);
@@ -72,7 +67,6 @@ export function useAppLogic() {
     } else {
       role = 'petri_flow';
     }
-
     const newEdge: Edge = {
       id: `e_${params.source}-${params.target}-${Date.now()}`,
       source: params.source, target: params.target, data: { role },
@@ -90,10 +84,6 @@ export function useAppLogic() {
     clearSelection();
   }, [selectedNodeId, selectedEdgeId, setCurrentNodes, setCurrentEdges, clearSelection]);
 
-  // ==========================================
-  // ノード・属性の追加・更新ハンドラ
-  // ==========================================
-
   const addNode = useCallback((type: 'groupNode' | 'blockNode', kind: string, parentId?: string) => {
     const id = `${kind}_${Math.random().toString(36).substr(2, 5)}`;
     setCurrentNodes((nds) => nds.concat({
@@ -106,23 +96,31 @@ export function useAppLogic() {
     const id = `${type}_${Math.random().toString(36).substr(2, 5)}`;
     setCurrentNodes((nds) => nds.concat({
       id, type, position: { x: 100, y: 100 },
-      data: { kind: type, label: type === 'placeNode' ? 'Tag' : 'Action', attributes: [], typeDetail: '', isInstance: false, isPrivate: false, args: [], boundFunctionId: null },
+      data: { 
+        kind: type, 
+        label: type === 'placeNode' ? 'Tag' : 'Action', 
+        attributes: [], typeDetail: '', isInstance: false, isPrivate: false, args: [], boundFunctionId: null,
+        assignedTagType: null, assignedTargetName: '' // ★ 初期化項目を追加
+      },
     }));
   }, [setCurrentNodes]);
+
+  // ★ 新設: タグ定義を追加するロジック
+  const addTagDefinition = useCallback((newTag: Omit<TagDefinition, 'id'>) => {
+    const id = `tagdef_${Math.random().toString(36).substr(2, 5)}`;
+    setTagDefinitions((prev) => [...prev, { id, ...newTag }]);
+  }, [setTagDefinitions]);
 
   const updateSelectedNode = useCallback((field: keyof NodeData, value: unknown) => {
     setCurrentNodes((nds) => nds.map((n) => {
       if (n.id !== selectedNodeId) return n;
       const updated = { ...n, data: { ...n.data } };
-
-      // ペトリネットプレースの手動型設定のハンドリング
       if (n.type === 'placeNode' && field === 'typeDetail') {
         updated.data.isTypeManuallySet = (value !== '__AUTO__');
         updated.data.typeDetail = value === '__AUTO__' ? '' : (value as string);
       } else {
         updated.data = { ...updated.data, [field]: value };
       }
-
       if (field === 'kind') {
         updated.data.attributes = [];
         updated.data.isInstance = false;
@@ -136,7 +134,6 @@ export function useAppLogic() {
     setCurrentEdges((eds) => eds.map((e) => (e.id === selectedEdgeId ? { ...e, data: { ...(e.data ?? {}), role } } : e)));
   }, [selectedEdgeId, setCurrentEdges]);
 
-  // 属性・ペトリネット関数の割り当て関連 (省略せず整理)
   const addAttribute = useCallback((type: string) => {
     if (!type || !selectedNodeId) return;
     setCurrentNodes((nds) => nds.map(n => {
@@ -171,15 +168,12 @@ export function useAppLogic() {
     if (!transNode) return;
     const prevFuncId = transNode.data.boundFunctionId;
 
-    // 古い関数ノードから @Event を剥がす
     if (prevFuncId) {
       setNodes((prev) => prev.map((n) => n.id === prevFuncId 
         ? { ...n, data: { ...n.data, attributes: (n.data.attributes ?? []).filter((a) => a.type !== '@Event') } } : n));
     }
-
     setPetriNodes((prev) => prev.map((n) => (n.id === transitionNodeId ? { ...n, data: { ...n.data, boundFunctionId: targetFunctionNodeId } } : n)));
 
-    // 新しい関数ノードに @Event を付与
     if (targetFunctionNodeId) {
       setNodes((prev) => prev.map((n) => {
         if (n.id !== targetFunctionNodeId) return n;
@@ -189,19 +183,25 @@ export function useAppLogic() {
     }
   }, [petriNodes, setNodes, setPetriNodes]);
 
-  // ==========================================
-  // ファイルIO・コードジェネレート
-  // ==========================================
-  
-  const handleSave = useCallback(() => saveProjectFile(nodes, edges, petriNodes, petriEdges), [nodes, edges, petriNodes, petriEdges]);
+  // ★ 拡張: tagDefinitions を含めてセーブファイルを構築
+  const handleSave = useCallback(() => {
+    saveProjectFile(nodes, edges, petriNodes, petriEdges, tagDefinitions);
+  }, [nodes, edges, petriNodes, petriEdges, tagDefinitions]);
+
+  // ★ 拡張: tagDefinitions をロードして復元
   const handleLoad = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     loadProjectFile(file, (data) => {
-      setNodes(data.nodes); setEdges(data.edges); setPetriNodes(data.petriNodes); setPetriEdges(data.petriEdges); clearSelection();
+      setNodes(data.nodes); 
+      setEdges(data.edges); 
+      setPetriNodes(data.petriNodes); 
+      setPetriEdges(data.petriEdges); 
+      setTagDefinitions(data.tagDefinitions || []); // ロード処理に組み込み
+      clearSelection();
     }, () => alert('不正なファイル形式です'));
     e.target.value = '';
-  }, [setNodes, setEdges, setPetriNodes, setPetriEdges, clearSelection]);
+  }, [setNodes, setEdges, setPetriNodes, setPetriEdges, setTagDefinitions, clearSelection]);
 
   const handleGenerateCode = useCallback(() => setPreviewCode(generateBoxyhCode(nodes, edges)), [nodes, edges]);
   const downloadBoxyh = useCallback(() => {
@@ -226,6 +226,7 @@ export function useAppLogic() {
     activeTab, isClassTab, isPetriTab, viewMode, setViewMode, depthLimit, setDepthLimit, previewCode, setPreviewCode,
     displayNodes, displayEdges, selectedNodeId, selectedEdgeId, selectedNode, selectedEdge,
     editingAttrId, setEditingAttrId, availableEvents, functionNodes, currentNodes, currentEdges, setCurrentNodes,
+    tagDefinitions, isTagModalOpen, setIsTagModalOpen, addTagDefinition, // ★ 新規露出項目
     handleTabSwitch, onPaneClick, onNodeClick, onEdgeClick, onEdgeContextMenu, onAssignEvent,
     isValidConnection, onConnect, reverseSelectedEdge, deleteSelectedElement,
     addNode, addPetriNode, updateSelectedNode, updateSelectedEdge,
