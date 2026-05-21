@@ -1,6 +1,6 @@
 // src/hooks/useAppLogic.ts
 import { useCallback, useMemo, useState } from 'react';
-import type { Node, Edge, Connection, NodeData, TagDefinition } from '../model/graphTypes';
+import type { Node, Edge, Connection, NodeData } from '../model/graphTypes';
 import { generateBoxyhCode } from '../utils/codeGenerator';
 import { saveProjectFile, loadProjectFile } from '../utils/fileManager';
 import { useGraphState } from './useGraphState';
@@ -14,7 +14,7 @@ export function useAppLogic() {
     nodes, setNodes, edges, setEdges,
     petriNodes, setPetriNodes, petriEdges, setPetriEdges,
     currentNodes, currentEdges, setCurrentNodes, setCurrentEdges,
-    tagDefinitions, setTagDefinitions // ★ 状態の取得
+    tagDefinitions, setTagDefinitions
   } = useGraphState();
 
   const {
@@ -23,9 +23,6 @@ export function useAppLogic() {
   } = useSelection();
 
   const [previewCode, setPreviewCode] = useState<string | null>(null);
-  
-  // ★ 新設: タグ作成モーダルの表示状態
-  const [isTagModalOpen, setIsTagModalOpen] = useState(false);
 
   const isClassTab = activeTab === 'class';
   const isPetriTab = activeTab === 'petri';
@@ -45,7 +42,7 @@ export function useAppLogic() {
     clearSelection();
   }, [setActiveTab, clearSelection]);
 
-const onNodeClick = useCallback((_e: React.MouseEvent, node: Node) => selectNode(node.id), [selectNode]);
+  const onNodeClick = useCallback((_e: React.MouseEvent, node: Node) => selectNode(node.id), [selectNode]);
   const onEdgeClick = useCallback((_e: React.MouseEvent, edge: Edge) => selectEdge(edge.id), [selectEdge]);
   const onPaneClick = useCallback(() => {}, []);
 
@@ -96,20 +93,64 @@ const onNodeClick = useCallback((_e: React.MouseEvent, node: Node) => selectNode
     const id = `${type}_${Math.random().toString(36).substr(2, 5)}`;
     setCurrentNodes((nds) => nds.concat({
       id, type, position: { x: 100, y: 100 },
-      data: { 
-        kind: type, 
-        label: type === 'placeNode' ? 'Tag' : 'Action', 
-        attributes: [], typeDetail: '', isInstance: false, isPrivate: false, args: [], boundFunctionId: null,
-        assignedTagType: null, assignedTargetName: '' // ★ 初期化項目を追加
-      },
+      data: { kind: type, label: type === 'placeNode' ? 'Tag' : 'Action', attributes: [], typeDetail: '', isInstance: false, isPrivate: false, args: [], boundFunctionId: null, assignedTagType: null, assignedTargetName: '' },
     }));
   }, [setCurrentNodes]);
 
-  // ★ 新設: タグ定義を追加するロジック
-  const addTagDefinition = useCallback((newTag: Omit<TagDefinition, 'id'>) => {
-    const id = `tagdef_${Math.random().toString(36).substr(2, 5)}`;
-    setTagDefinitions((prev) => [...prev, { id, ...newTag }]);
+
+  // ==========================================
+  // タグ定義管理ロジック (インライン・コンテキストメニュー対応)
+  // ==========================================
+
+  const addTagGroup = useCallback((groupName: string) => {
+    setTagDefinitions((prev) => {
+      if (prev.some(t => t.groupName === groupName)) return prev; // 既存なら無視
+      // tagName が空文字のレコードを「空グループ」のプレースホルダーとして作成
+      return [...prev, { id: `tagdef_${Math.random().toString(36).substr(2, 5)}`, groupName, tagName: '', description: '' }];
+    });
   }, [setTagDefinitions]);
+
+  const addTagDefinition = useCallback((groupName: string, tagName: string) => {
+    setTagDefinitions((prev) => [
+      ...prev, 
+      { id: `tagdef_${Math.random().toString(36).substr(2, 5)}`, groupName, tagName, description: '' }
+    ]);
+  }, [setTagDefinitions]);
+
+  const deleteTagGroup = useCallback((groupName: string) => {
+    setTagDefinitions((prev) => prev.filter(t => t.groupName !== groupName));
+    // キャンバス上のPlaceノードで該当グループを割り当てているものをリセット
+    setCurrentNodes(nds => nds.map(n => 
+      n.type === 'placeNode' && n.data.assignedTagType === 'group' && n.data.assignedTargetName === groupName 
+      ? { ...n, data: { ...n.data, assignedTagType: null, assignedTargetName: '', label: 'Tag' } } : n
+    ));
+  }, [setTagDefinitions, setCurrentNodes]);
+
+  const deleteTagDefinition = useCallback((tagId: string) => {
+    let deletedTagName = '';
+    setTagDefinitions((prev) => {
+      const target = prev.find(t => t.id === tagId);
+      if (target) deletedTagName = target.tagName;
+      const next = prev.filter(t => t.id !== tagId);
+      // グループ内の最後のタグを消した際、グループ自体が消滅しないように空プレースホルダーを挿入
+      if (target && !next.some(t => t.groupName === target.groupName)) {
+        return [...next, { id: `tagdef_${Math.random().toString(36).substr(2, 5)}`, groupName: target.groupName, tagName: '', description: '' }];
+      }
+      return next;
+    });
+    // キャンバス上のPlaceノードで該当タグを割り当てているものをリセット
+    setCurrentNodes(nds => nds.map(n => 
+      n.type === 'placeNode' && n.data.assignedTagType === 'tag' && n.data.assignedTargetName === deletedTagName 
+      ? { ...n, data: { ...n.data, assignedTagType: null, assignedTargetName: '', label: 'Tag' } } : n
+    ));
+  }, [setTagDefinitions, setCurrentNodes]);
+
+  const updateTagDescription = useCallback((tagId: string, description: string) => {
+    setTagDefinitions((prev) => prev.map(t => t.id === tagId ? { ...t, description } : t));
+  }, [setTagDefinitions]);
+
+  // ==========================================
+
 
   const updateSelectedNode = useCallback((field: keyof NodeData, value: unknown) => {
     setCurrentNodes((nds) => nds.map((n) => {
@@ -183,21 +224,14 @@ const onNodeClick = useCallback((_e: React.MouseEvent, node: Node) => selectNode
     }
   }, [petriNodes, setNodes, setPetriNodes]);
 
-  // ★ 拡張: tagDefinitions を含めてセーブファイルを構築
-  const handleSave = useCallback(() => {
-    saveProjectFile(nodes, edges, petriNodes, petriEdges, tagDefinitions);
-  }, [nodes, edges, petriNodes, petriEdges, tagDefinitions]);
-
-  // ★ 拡張: tagDefinitions をロードして復元
+  const handleSave = useCallback(() => saveProjectFile(nodes, edges, petriNodes, petriEdges, tagDefinitions), [nodes, edges, petriNodes, petriEdges, tagDefinitions]);
+  
   const handleLoad = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     loadProjectFile(file, (data) => {
-      setNodes(data.nodes); 
-      setEdges(data.edges); 
-      setPetriNodes(data.petriNodes); 
-      setPetriEdges(data.petriEdges); 
-      setTagDefinitions(data.tagDefinitions || []); // ロード処理に組み込み
+      setNodes(data.nodes); setEdges(data.edges); setPetriNodes(data.petriNodes); setPetriEdges(data.petriEdges); 
+      setTagDefinitions(data.tagDefinitions || []);
       clearSelection();
     }, () => alert('不正なファイル形式です'));
     e.target.value = '';
@@ -226,7 +260,8 @@ const onNodeClick = useCallback((_e: React.MouseEvent, node: Node) => selectNode
     activeTab, isClassTab, isPetriTab, viewMode, setViewMode, depthLimit, setDepthLimit, previewCode, setPreviewCode,
     displayNodes, displayEdges, selectedNodeId, selectedEdgeId, selectedNode, selectedEdge,
     editingAttrId, setEditingAttrId, availableEvents, functionNodes, currentNodes, currentEdges, setCurrentNodes,
-    tagDefinitions, isTagModalOpen, setIsTagModalOpen, addTagDefinition, // ★ 新規露出項目
+    tagDefinitions,
+    addTagGroup, addTagDefinition, deleteTagGroup, deleteTagDefinition, updateTagDescription,
     handleTabSwitch, onPaneClick, onNodeClick, onEdgeClick, onEdgeContextMenu, onAssignEvent,
     isValidConnection, onConnect, reverseSelectedEdge, deleteSelectedElement,
     addNode, addPetriNode, updateSelectedNode, updateSelectedEdge,

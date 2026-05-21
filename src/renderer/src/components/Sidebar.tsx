@@ -1,6 +1,8 @@
 // src/components/Sidebar.tsx
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useState } from 'react';
 import type { TagDefinition } from '../model/graphTypes';
+
+export type ViewMode = 'all' | 'no-dependency' | 'depth';
 
 interface SidebarProps {
   activeTab: 'class' | 'petri';
@@ -15,105 +17,243 @@ interface SidebarProps {
   onLoad: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onGenerateCode: () => void;
   
-  // ★ 追加
   tagDefinitions: TagDefinition[];
-  onOpenTagModal: () => void;
+  onAddTagGroup: (groupName: string) => void;
+  onAddTagDefinition: (groupName: string, tagName: string) => void;
+  onDeleteTagGroup: (groupName: string) => void;
+  onDeleteTagDefinition: (tagId: string) => void;
+  onUpdateTagDescription: (tagId: string, description: string) => void;
 }
 
 const sideBtn = { width: '100%', padding: '8px 10px', marginBottom: '10px', cursor: 'pointer', borderRadius: '4px', border: '1px solid #ced4da', fontSize: '13px' };
+const inputBaseStyle = { width: '100%', padding: '4px 6px', fontSize: '12px', border: '1px solid #007bff', borderRadius: '3px', outline: 'none' };
 
 export const Sidebar: React.FC<SidebarProps> = ({
     activeTab, handleTabSwitch, onAddNode, onAddPetriNode, selectedNodeId, selectedNodeKind, selectedNodeLabel, selectedNodeType, onSave, onLoad, onGenerateCode,
-    tagDefinitions, onOpenTagModal // ★ 受け取り
+    tagDefinitions, onAddTagGroup, onAddTagDefinition, onDeleteTagGroup, onDeleteTagDefinition, onUpdateTagDescription
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    
+    const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+    
+    // インライン入力用の状態
+    const [creating, setCreating] = useState<{ type: 'group' | 'tag', parentGroup?: string } | null>(null);
+    const [inputValue, setInputValue] = useState('');
 
-    // ★ 作成されたタグをグループ名ごとにグルーピングする処理
+    const [editingDescId, setEditingDescId] = useState<string | null>(null);
+    const [descInputValue, setDescInputValue] = useState('');
+
+    // コンテキストメニューの状態
+    const [contextMenu, setContextMenu] = useState<{ x: number, y: number, type: 'group' | 'tag', targetId: string } | null>(null);
+
     const groupedTags = useMemo(() => {
         const map: Record<string, TagDefinition[]> = {};
         tagDefinitions.forEach((tag) => {
-            if (!map[tag.groupName]) {
-                map[tag.groupName] = [];
-            }
-            map[tag.groupName].push(tag);
+            if (!map[tag.groupName]) map[tag.groupName] = [];
+            if (tag.tagName !== '') map[tag.groupName].push(tag); // 空文字はプレースホルダーとして非表示
         });
         return map;
     }, [tagDefinitions]);
 
+    // ===== アクションハンドラ =====
+    const handleCreateConfirm = () => {
+        const val = inputValue.trim();
+        if (creating?.type === 'group' && val) {
+            onAddTagGroup(val);
+            setExpandedGroups(prev => ({ ...prev, [val]: true }));
+        } else if (creating?.type === 'tag' && creating.parentGroup && val) {
+            onAddTagDefinition(creating.parentGroup, val);
+        }
+        setCreating(null);
+        setInputValue('');
+    };
+
+    const handleDescConfirm = () => {
+        if (editingDescId) onUpdateTagDescription(editingDescId, descInputValue.trim());
+        setEditingDescId(null);
+        setDescInputValue('');
+    };
+
+    const handleInputKeyDown = (e: React.KeyboardEvent, onConfirm: () => void, onCancel: () => void) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onConfirm(); }
+        if (e.key === 'Escape') onCancel();
+    };
+
+    const openContextMenu = (e: React.MouseEvent, type: 'group' | 'tag', targetId: string) => {
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY, type, targetId });
+    };
+
     return (
-        <div style={{ width: '220px', background: '#f8f9fa', borderRight: '1px solid #dee2e6', display: 'flex', flexDirection: 'column', zIndex: 10 }}>
+        <div style={{ width: '250px', background: '#f8f9fa', borderRight: '1px solid #dee2e6', display: 'flex', flexDirection: 'column', zIndex: 10, userSelect: 'none' }}>
+            
+            {/* 右クリック時のオーバーレイ＆メニュー */}
+            {contextMenu && (
+                <>
+                    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }} onClick={() => setContextMenu(null)} onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }} />
+                    <div style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 1001, background: '#fff', border: '1px solid #dee2e6', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', padding: '5px 0', minWidth: '140px', borderRadius: '4px' }}>
+                        
+                        {contextMenu.type === 'tag' && (
+                            <div style={{ padding: '6px 15px', cursor: 'pointer', fontSize: '12px', color: '#333' }}
+                                 onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f3f5'}
+                                 onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                 onClick={() => { 
+                                     setEditingDescId(contextMenu.targetId); 
+                                     setDescInputValue(tagDefinitions.find(t => t.id === contextMenu.targetId)?.description || ''); 
+                                     setContextMenu(null); 
+                                 }}>
+                                ✏️ 補足を追加・編集
+                            </div>
+                        )}
+                        {contextMenu.type === 'tag' && (
+                            <div style={{ padding: '6px 15px', cursor: 'pointer', fontSize: '12px', color: '#dc3545' }}
+                                 onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f3f5'}
+                                 onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                 onClick={() => { onDeleteTagDefinition(contextMenu.targetId); setContextMenu(null); }}>
+                                🗑️ タグを削除
+                            </div>
+                        )}
+                        {contextMenu.type === 'group' && (
+                            <div style={{ padding: '6px 15px', cursor: 'pointer', fontSize: '12px', color: '#dc3545' }}
+                                 onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f3f5'}
+                                 onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                 onClick={() => { onDeleteTagGroup(contextMenu.targetId); setContextMenu(null); }}>
+                                🗑️ グループを削除
+                            </div>
+                        )}
+                    </div>
+                </>
+            )}
+
             <div style={{ display: 'flex', borderBottom: '1px solid #dee2e6' }}>
-                <button onClick={() => handleTabSwitch('class')} style={{ flex: 1, padding: '12px 0', border: 'none', background: activeTab === 'class' ? '#fff' : 'transparent', fontWeight: activeTab === 'class' ? 'bold' : 'normal', borderBottom: activeTab === 'class' ? '3px solid #007bff' : '3px solid transparent', cursor: 'pointer' }}>クラス設計</button>
-                <button onClick={() => handleTabSwitch('petri')} style={{ flex: 1, padding: '12px 0', border: 'none', background: activeTab === 'petri' ? '#fff' : 'transparent', fontWeight: activeTab === 'petri' ? 'bold' : 'normal', borderBottom: activeTab === 'petri' ? '3px solid #007bff' : '3px solid transparent', cursor: 'pointer' }}>タグ管理</button>
+                <button onClick={() => handleTabSwitch('class')} style={{ flex: 1, padding: '12px 0', border: 'none', background: activeTab === 'class' ? '#fff' : 'transparent', fontWeight: activeTab === 'class' ? 'bold' : 'normal', borderBottom: activeTab === 'class' ? '3px solid #007bff' : '3px solid transparent', cursor: 'pointer', fontSize: '13px' }}>クラス設計</button>
+                <button onClick={() => handleTabSwitch('petri')} style={{ flex: 1, padding: '12px 0', border: 'none', background: activeTab === 'petri' ? '#fff' : 'transparent', fontWeight: activeTab === 'petri' ? 'bold' : 'normal', borderBottom: activeTab === 'petri' ? '3px solid #007bff' : '3px solid transparent', cursor: 'pointer', fontSize: '13px' }}>タグ管理</button>
             </div>
 
-            <div style={{ padding: '15px', overflowY: 'auto', flexGrow: 1 }}>
-                <h3 style={{ fontSize: '16px', margin: '0 0 20px 0' }}>Metall-forge</h3>
-                
+            <div style={{ padding: '15px', overflowY: 'auto', flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ borderBottom: '1px solid #dee2e6', paddingBottom: '15px', marginBottom: '15px' }}>
-                {activeTab === 'class' ? (
-                    <>
-                    <button onClick={() => onAddNode('groupNode', 'class')} style={sideBtn}>＋ クラス</button>
-                    <button onClick={() => onAddNode('groupNode', 'struct')} style={sideBtn}>＋ 構造体</button>
-                    <button onClick={() => onAddNode('groupNode', 'enum')} style={sideBtn}>＋ 列挙型(Enum)</button>
-                    
-                    {selectedNodeType === 'groupNode' && (
-                        <div style={{ background: '#e7f3ff', padding: '10px', borderRadius: '4px', marginTop: '10px' }}>
-                        <p style={{ fontSize: '10px', margin: '0 0 5px 0', fontWeight: 'bold' }}>{selectedNodeLabel} 内に追加:</p>
-                        {selectedNodeKind === 'enum' ? (
-                            <button onClick={() => onAddNode('blockNode', 'variable', selectedNodeId!)} style={{ ...sideBtn, background: '#fff', borderColor: '#007bff' }}>＋ 変数</button>
-                        ) : (
-                            <>
-                            <button onClick={() => onAddNode('blockNode', 'method', selectedNodeId!)} style={{ ...sideBtn, background: '#fff', borderColor: '#007bff' }}>＋ メソッド</button>
-                            <button onClick={() => onAddNode('blockNode', 'variable', selectedNodeId!)} style={{ ...sideBtn, background: '#fff', borderColor: '#007bff' }}>＋ 変数</button>
-                            </>
+                    {activeTab === 'class' ? (
+                        <>
+                        <button onClick={() => onAddNode('groupNode', 'class')} style={sideBtn}>＋ クラス</button>
+                        <button onClick={() => onAddNode('groupNode', 'struct')} style={sideBtn}>＋ 構造体</button>
+                        <button onClick={() => onAddNode('groupNode', 'enum')} style={sideBtn}>＋ 列挙型(Enum)</button>
+                        {selectedNodeType === 'groupNode' && (
+                            <div style={{ background: '#e7f3ff', padding: '10px', borderRadius: '4px', marginTop: '10px' }}>
+                            <p style={{ fontSize: '10px', margin: '0 0 5px 0', fontWeight: 'bold' }}>{selectedNodeLabel} 内に追加:</p>
+                            {selectedNodeKind === 'enum' ? (
+                                <button onClick={() => onAddNode('blockNode', 'variable', selectedNodeId!)} style={{ ...sideBtn, background: '#fff', borderColor: '#007bff', marginBottom: 0 }}>＋ 変数</button>
+                            ) : (
+                                <>
+                                <button onClick={() => onAddNode('blockNode', 'method', selectedNodeId!)} style={{ ...sideBtn, background: '#fff', borderColor: '#007bff' }}>＋ メソッド</button>
+                                <button onClick={() => onAddNode('blockNode', 'variable', selectedNodeId!)} style={{ ...sideBtn, background: '#fff', borderColor: '#007bff', marginBottom: 0 }}>＋ 変数</button>
+                                </>
+                            )}
+                            </div>
                         )}
-                        </div>
+                        </>
+                    ) : (
+                        <>
+                        <button onClick={() => onAddPetriNode('placeNode')} style={sideBtn}>＋ 場所 (Place / タグ)</button>
+                        <button onClick={() => onAddPetriNode('transitionNode')} style={sideBtn}>＋ トランジション (発火)</button>
+                        </>
                     )}
-                    </>
-                ) : (
-                    <>
-                    <button onClick={() => onOpenTagModal()} style={{ ...sideBtn, background: '#e7f3ff', color: '#007bff', borderColor: '#007bff', fontWeight: 'bold' }}>＋ タグ定義を作成</button>
-                    <div style={{ height: '5px' }} />
-                    <button onClick={() => onAddPetriNode('placeNode')} style={sideBtn}>＋ 場所 (Place / タグ)</button>
-                    <button onClick={() => onAddPetriNode('transitionNode')} style={sideBtn}>＋ トランジション (発火)</button>
-                    </>
-                )}
                 </div>
 
-                {/* ★ タグ管理タブの時にグループ化されたタグ一覧を表示する領域 */}
+                {/* EXPLORER */}
                 {activeTab === 'petri' && (
-                    <div style={{ marginTop: '15px' }}>
-                        <h4 style={{ fontSize: '12px', margin: '0 0 10px 0', color: '#495057', borderBottom: '1px solid #dee2e6', paddingBottom: '4px' }}>登録済みのタグ一覧</h4>
-                        {Object.keys(groupedTags).length === 0 ? (
-                            <div style={{ fontSize: '11px', color: '#adb5bd', fontStyle: 'italic' }}>タグ定義がありません</div>
-                        ) : (
-                            Object.entries(groupedTags).map(([group, tags]) => (
-                                <div key={group} style={{ marginBottom: '12px', background: '#fff', border: '1px solid #e9ecef', borderRadius: '4px', padding: '6px' }}>
-                                    <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#495057', display: 'flex', alignItems: 'center', gap: '4px', borderBottom: '1px solid #f1f3f5', paddingBottom: '2px', marginBottom: '4px' }}>
-                                        📦 {group} <span style={{ fontSize: '9px', fontWeight: 'normal', color: '#868e96' }}>({tags.length})</span>
-                                    </div>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                        {tags.map((t) => (
-                                            <span 
-                                                key={t.id} 
-                                                title={t.description || '補足なし'} 
-                                                style={{ fontSize: '10px', background: '#e8f4fd', color: '#0056b3', padding: '2px 6px', borderRadius: '3px', border: '1px solid #d0e7fc', cursor: 'help' }}
-                                            >
-                                                🏷️ {t.tagName}
-                                            </span>
-                                        ))}
-                                    </div>
+                    <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', padding: '0 5px' }}>
+                            <h4 style={{ fontSize: '11px', margin: 0, color: '#495057', fontWeight: 'bold', letterSpacing: '0.5px' }}>EXPLORER: TAGS</h4>
+                            <button 
+                                onClick={() => { setCreating({ type: 'group' }); setInputValue(''); }} 
+                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '2px 6px', borderRadius: '4px' }} 
+                                title="新規グループを追加"
+                            >📁➕</button>
+                        </div>
+                        
+                        <div style={{ marginLeft: '-15px', marginRight: '-15px' }}>
+                            
+                            {/* 新規グループ入力欄（上部） */}
+                            {creating?.type === 'group' && (
+                                <div style={{ padding: '4px 15px' }}>
+                                    <input autoFocus value={inputValue} onChange={e => setInputValue(e.target.value)} onBlur={handleCreateConfirm} onKeyDown={e => handleInputKeyDown(e, handleCreateConfirm, () => setCreating(null))} style={inputBaseStyle} placeholder="グループ名..." />
                                 </div>
-                            ))
-                        )}
+                            )}
+
+                            {Object.keys(groupedTags).length === 0 && !creating ? (
+                                <div style={{ fontSize: '11px', color: '#adb5bd', paddingLeft: '20px', fontStyle: 'italic' }}>タグ定義がありません</div>
+                            ) : (
+                                Object.entries(groupedTags).map(([group, tags]) => {
+                                    const isExpanded = expandedGroups[group] !== false;
+                                    return (
+                                        <div key={group} style={{ fontFamily: 'sans-serif' }}>
+                                            {/* グループ行 */}
+                                            <div 
+                                                onContextMenu={(e) => openContextMenu(e, 'group', group)}
+                                                onClick={() => setExpandedGroups(prev => ({ ...prev, [group]: !isExpanded }))}
+                                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 15px', cursor: 'pointer', fontSize: '13px', color: '#333' }}
+                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e9ecef'}
+                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                                    <span style={{ width: '16px', display: 'inline-block', textAlign: 'center', marginRight: '4px', fontSize: '10px', transition: 'transform 0.1s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                                                    <span style={{ marginRight: '6px' }}>{isExpanded ? '📂' : '📁'}</span>
+                                                    <span>{group}</span>
+                                                </div>
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); setCreating({ type: 'tag', parentGroup: group }); setExpandedGroups(prev => ({ ...prev, [group]: true })); setInputValue(''); }}
+                                                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px' }} title="このグループにタグを追加"
+                                                >🏷️➕</button>
+                                            </div>
+                                            
+                                            {/* タグ追加入力欄 */}
+                                            {isExpanded && creating?.type === 'tag' && creating.parentGroup === group && (
+                                                <div style={{ padding: '4px 15px 4px 40px' }}>
+                                                    <input autoFocus value={inputValue} onChange={e => setInputValue(e.target.value)} onBlur={handleCreateConfirm} onKeyDown={e => handleInputKeyDown(e, handleCreateConfirm, () => setCreating(null))} style={inputBaseStyle} placeholder="タグ名..." />
+                                                </div>
+                                            )}
+
+                                            {/* ファイル（タグ）行 */}
+                                            {isExpanded && (
+                                                <div>
+                                                    {tags.map(t => (
+                                                        <div key={t.id}>
+                                                            <div 
+                                                                onContextMenu={(e) => openContextMenu(e, 'tag', t.id)}
+                                                                style={{ display: 'flex', alignItems: 'center', padding: '4px 15px 4px 40px', cursor: 'pointer', fontSize: '13px', color: '#495057' }}
+                                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e9ecef'}
+                                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                            >
+                                                                <span style={{ marginRight: '6px' }}>🏷️</span>
+                                                                <span>{t.tagName}</span>
+                                                            </div>
+                                                            
+                                                            {/* 補足の表示・インライン編集 */}
+                                                            {editingDescId === t.id ? (
+                                                                <div style={{ padding: '0 15px 4px 40px' }}>
+                                                                    <textarea autoFocus value={descInputValue} onChange={e => setDescInputValue(e.target.value)} onBlur={handleDescConfirm} onKeyDown={e => handleInputKeyDown(e, handleDescConfirm, () => setEditingDescId(null))} style={{ ...inputBaseStyle, height: '40px', resize: 'none', fontFamily: 'inherit' }} placeholder="補足を入力 (Enterで確定)" />
+                                                                </div>
+                                                            ) : t.description ? (
+                                                                <div style={{ padding: '0 15px 4px 40px', fontSize: '10px', color: '#868e96', whiteSpace: 'pre-wrap' }}>
+                                                                    {t.description}
+                                                                </div>
+                                                            ) : null}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
                     </div>
                 )}
 
-                <div style={{ display: 'flex', gap: '5px', marginBottom: '15px' }}>
-                <button onClick={onSave} style={{ ...sideBtn, flex: 1, fontSize: '11px', background: '#e9ecef' }}>💾 保存</button>
-                <button onClick={() => fileInputRef.current?.click()} style={{ ...sideBtn, flex: 1, fontSize: '11px', background: '#e9ecef' }}>📂 読込</button>
-                <input type="file" accept=".json" style={{ display: 'none' }} ref={fileInputRef} onChange={onLoad} />
+                <div style={{ display: 'flex', gap: '5px', marginTop: 'auto', paddingTop: '15px' }}>
+                    <button onClick={onSave} style={{ ...sideBtn, flex: 1, fontSize: '11px', background: '#e9ecef', marginBottom: 0 }}>💾 保存</button>
+                    <button onClick={() => fileInputRef.current?.click()} style={{ ...sideBtn, flex: 1, fontSize: '11px', background: '#e9ecef', marginBottom: 0 }}>📂 読込</button>
+                    <input type="file" accept=".json" style={{ display: 'none' }} ref={fileInputRef} onChange={onLoad} />
                 </div>
             </div>
 

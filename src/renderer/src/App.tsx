@@ -1,20 +1,16 @@
-// src/App.tsx
 import { CustomFlowCanvas } from './components/CustomFlowCanvas';
 import { Sidebar } from './components/Sidebar';
 import { PropertyPanel } from './components/PropertyPanel';
 import { CodePreviewModal } from './components/CodePreviewModal';
-import { TagCreateModal } from './components/TagCreateModal'; // ★ 新規インポート
 import { useAppLogic } from './hooks/useAppLogic';
 
 export default function App() {
   const {
     activeTab, isClassTab, viewMode, setViewMode, depthLimit, setDepthLimit, previewCode, setPreviewCode,
     displayNodes, displayEdges, selectedNodeId, selectedEdgeId, selectedNode, selectedEdge,
-    editingAttrId, setEditingAttrId,
-    availableEvents, functionNodes, currentNodes, currentEdges,
-    tagDefinitions, isTagModalOpen, setIsTagModalOpen, addTagDefinition, // ★ 新規取得項目
-    setCurrentNodes,
-    handleTabSwitch, onPaneClick, onNodeClick, onEdgeClick, onEdgeContextMenu, onAssignEvent,
+    editingAttrId, setEditingAttrId, availableEvents, functionNodes, currentNodes, currentEdges,
+    tagDefinitions, addTagGroup, addTagDefinition, deleteTagGroup, deleteTagDefinition, updateTagDescription,
+    setCurrentNodes, handleTabSwitch, onPaneClick, onNodeClick, onEdgeClick, onEdgeContextMenu, onAssignEvent,
     isValidConnection, onConnect, reverseSelectedEdge, deleteSelectedElement,
     addNode, addPetriNode, updateSelectedNode, updateSelectedEdge,
     addAttribute, removeAttribute, updateAttrParam, handleSave, handleLoad, handleGenerateCode, downloadBoxyh
@@ -23,7 +19,6 @@ export default function App() {
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', overflow: 'hidden', userSelect: 'none' }}>
       
-      {/* 1. コードプレビューモーダル */}
       {previewCode && (
         <CodePreviewModal
           previewCode={previewCode}
@@ -32,15 +27,6 @@ export default function App() {
         />
       )}
 
-      {/* ★ 2. 新設: タグ定義作成モーダル */}
-      {isTagModalOpen && (
-        <TagCreateModal
-          onClose={() => setIsTagModalOpen(false)}
-          onSave={addTagDefinition}
-        />
-      )}
-
-      {/* 左ペインメニュー */}
       <Sidebar
         activeTab={activeTab}
         handleTabSwitch={handleTabSwitch}
@@ -53,11 +39,15 @@ export default function App() {
         onSave={handleSave}
         onLoad={handleLoad}
         onGenerateCode={handleGenerateCode}
-        tagDefinitions={tagDefinitions} // ★ パスする
-        onOpenTagModal={() => setIsTagModalOpen(true)} // ★ モーダルを開く関数を渡す
+        
+        tagDefinitions={tagDefinitions}
+        onAddTagGroup={addTagGroup}
+        onAddTagDefinition={addTagDefinition}
+        onDeleteTagGroup={deleteTagGroup}
+        onDeleteTagDefinition={deleteTagDefinition}
+        onUpdateTagDescription={updateTagDescription}
       />
 
-      {/* グラフキャンバス領域 */}
       <div style={{ flexGrow: 1, position: 'relative' }}>
         {isClassTab && (
           <div style={{ position: 'absolute', top: 15, left: 15, zIndex: 100, display: 'flex', flexDirection: 'column', gap: '8px', width: '160px' }}>
@@ -100,7 +90,6 @@ export default function App() {
         />
       </div>
 
-      {/* 右プロパティパネル */}
       <PropertyPanel
         activeTab={activeTab}
         selectedNode={selectedNode}
@@ -119,7 +108,7 @@ export default function App() {
         onAssignEvent={onAssignEvent}
         nodes={currentNodes}
         edges={currentEdges}
-        tagDefinitions={tagDefinitions} // ★ パスする
+        tagDefinitions={tagDefinitions}
       />
     </div>
   );
