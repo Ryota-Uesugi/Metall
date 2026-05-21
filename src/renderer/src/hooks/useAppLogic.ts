@@ -225,15 +225,21 @@ export function useAppLogic() {
     e.target.value = '';
   }, [setNodes, setEdges, setPetriNodes, setPetriEdges, setTagDefinitions, clearSelection]);
 
-  const handleGenerateCode = useCallback(() => setPreviewCode(generateBoxyhCode(nodes, edges)), [nodes, edges]);
+  // ★ 修正箇所: ペトリネット情報も含めてコードジェネレータへ渡す
+  const handleGenerateCode = useCallback(() => {
+    setPreviewCode(generateBoxyhCode(nodes, edges, petriNodes, petriEdges, tagDefinitions));
+  }, [nodes, edges, petriNodes, petriEdges, tagDefinitions]);
+
   const downloadBoxyh = useCallback(() => {
     if (!previewCode) return;
     const url = URL.createObjectURL(new Blob([previewCode], { type: 'text/plain' }));
     const a = document.createElement('a'); a.href = url; a.download = 'Model.boxyh'; a.click(); URL.revokeObjectURL(url);
   }, [previewCode]);
+
   const reverseSelectedEdge = useCallback(() => {
     if (selectedEdgeId) setCurrentEdges((eds) => eds.map((e) => (e.id === selectedEdgeId ? { ...e, source: e.target, target: e.source } : e)));
   }, [selectedEdgeId, setCurrentEdges]);
+
   const onEdgeContextMenu = useCallback((e: React.MouseEvent, edge: Edge) => {
     e.preventDefault(); setCurrentEdges((eds) => eds.filter((x) => x.id !== edge.id));
     if (selectedEdgeId === edge.id) clearSelection();
@@ -248,7 +254,7 @@ export function useAppLogic() {
     activeTab, isClassTab, isPetriTab, viewMode, setViewMode, depthLimit, setDepthLimit, previewCode, setPreviewCode,
     displayNodes, displayEdges, selectedNodeId, selectedEdgeId, selectedNode, selectedEdge,
     editingAttrId, setEditingAttrId, availableEvents, functionNodes, currentNodes, currentEdges, setCurrentNodes,
-    tagDefinitions, nodes, // ★ nodes を追加
+    tagDefinitions, nodes,
     addTagGroup, addTagDefinition, deleteTagGroup, deleteTagDefinition, updateTagDescription,
     handleTabSwitch, onPaneClick, onNodeClick, onEdgeClick, onEdgeContextMenu, onAssignEvent,
     isValidConnection, onConnect, reverseSelectedEdge, deleteSelectedElement,

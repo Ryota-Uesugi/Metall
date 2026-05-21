@@ -19,7 +19,6 @@ export function useGraphAutomations({
   // 1. クラス図: 変数への接続があるクラスに @Instance を自動付与/解除
   useEffect(() => {
     if (!isClassTab) return;
-
     setNodes((prevNodes) => {
       let hasChanged = false;
       const nextNodes = prevNodes.map((node) => {
@@ -42,7 +41,7 @@ export function useGraphAutomations({
     });
   }, [edges, isClassTab, setNodes]);
 
-  // 2. ペトリネット: トランジションに割り当てられた関数の型をプレースに自動伝播
+  // 2. ペトリネット: トランジションに割り当てられた関数の型・名前を自動伝播
   useEffect(() => {
     setPetriNodes((prevPetriNodes) => {
       let hasChanged = false;
@@ -50,24 +49,46 @@ export function useGraphAutomations({
       const transitions = prevPetriNodes.filter((n) => n.type === 'transitionNode');
 
       for (const trans of transitions) {
-        if (!trans.data.boundFunctionId) continue;
+        
+        // ★ バインドされていない場合はデフォルト名にして以降の処理をスキップ
+        if (!trans.data.boundFunctionId) {
+          if (trans.data.label !== 'Action (未設定)') {
+            const transIdx = nextNodes.findIndex(n => n.id === trans.id);
+            if (transIdx !== -1) {
+              nextNodes[transIdx] = { ...trans, data: { ...trans.data, label: 'Action (未設定)' } };
+              hasChanged = true;
+            }
+          }
+          continue;
+        }
 
         const funcNode = nodes.find((n) => n.id === trans.data.boundFunctionId);
         if (!funcNode) continue;
 
+        // ★ 名前 (label) の自動同期 (所属クラス.関数名)
+        const parentNode = funcNode.parentId ? nodes.find(n => n.id === funcNode.parentId) : null;
+        const expectedLabel = parentNode ? `${parentNode.data.label}.${funcNode.data.label}` : String(funcNode.data.label);
+
+        // トランジションノードの名前が更新されていなければ上書き
+        if (trans.data.label !== expectedLabel) {
+          const transIdx = nextNodes.findIndex(n => n.id === trans.id);
+          if (transIdx !== -1) {
+            nextNodes[transIdx] = { ...trans, data: { ...trans.data, label: expectedLabel } };
+            hasChanged = true;
+          }
+        }
+
+        // --- 以下、既存のプレース型同期ロジック ---
         const args = (funcNode.data.args as MethodArg[]) || [];
-        // ★ void を有効な型として扱わないようにフィルタリング
         const validArgs = args.filter(a => a.type && a.type !== 'void');
         const retType = (funcNode.data.typeDetail as string) || 'void';
 
-        // --- 入力プレース（引数用）の型同期 ---
         const inPlaces = petriEdges
           .filter((e) => e.target === trans.id)
           .map((e) => prevPetriNodes.find((n) => n.id === e.source))
           .filter((n) => n && n.type === 'placeNode') as Node[];
 
         inPlaces.forEach((place, idx) => {
-          // 有効な引数があればその型を、なければ空文字(指定なし)にする
           const expectedType = validArgs[idx] ? validArgs[idx].type : '';
           if (!place.data.isTypeManuallySet && place.data.typeDetail !== expectedType) {
             const placeIdx = nextNodes.findIndex(n => n.id === place.id);
@@ -78,14 +99,12 @@ export function useGraphAutomations({
           }
         });
 
-        // --- 出力プレース（戻り値用）の型同期 ---
         const outPlaces = petriEdges
           .filter((e) => e.source === trans.id)
           .map((e) => prevPetriNodes.find((n) => n.id === e.target))
           .filter((n) => n && n.type === 'placeNode') as Node[];
 
         outPlaces.forEach((place) => {
-          // 戻り値がvoidの場合は空文字(指定なし)として扱う
           const expectedType = retType === 'void' ? '' : retType;
           if (!place.data.isTypeManuallySet && place.data.typeDetail !== expectedType) {
             const placeIdx = nextNodes.findIndex(n => n.id === place.id);

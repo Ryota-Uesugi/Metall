@@ -1,5 +1,5 @@
 // src/utils/codeGenerator.ts
-import type { Node, Edge, Attribute, MethodArg } from '../model/graphTypes';
+import type { Node, Edge, Attribute, MethodArg, TagDefinition } from '../model/graphTypes';
 import { formatAttribute } from '../model/attributeFormat';
 
 class StringWriter {
@@ -23,85 +23,130 @@ function formatArgs(args: MethodArg[] | undefined) {
   return list.map(a => `${a.type} ${a.name}`).join(', ');
 }
 
-function isGroup(n: Node) { return n.type === 'groupNode'; }
-function isBlock(n: Node) { return n.type === 'blockNode'; }
-
-export function generateBoxyhCode(nodes: Node[], edges: Edge[]): string {
+export function generateBoxyhCode(
+  nodes: Node[], 
+  edges: Edge[],
+  petriNodes: Node[] = [],
+  petriEdges: Edge[] = [],
+  tagDefinitions: TagDefinition[] = []
+): string {
   const w = new StringWriter();
-  w.line('// @Module: MetallForgeGenerated');
-  w.line('// @Generated: from visual editor');
-  w.line('// ---------------------------');
+  w.line('// @Module: MetallForge Generated Code');
   w.line();
 
-  const byParent = new Map<string | undefined, Node[]>();
-  for (const n of nodes) {
-    const key = n.parentId;
-    const arr = byParent.get(key) ?? [];
-    arr.push(n);
-    byParent.set(key, arr);
-  }
-  const childrenOf = (pid?: string) => byParent.get(pid) ?? [];
-
-  function emitScope(scopeNodes: Node[], level: number) {
-    for (const gn of scopeNodes.filter(isGroup)) {
-      const d = gn.data as any;
-      emitAttributes(w, d.attributes, level);
-      w.line(`${indentOf(level)}${d.kind} ${d.label} {`);
-      emitScope(childrenOf(gn.id), level + 1);
-      w.line(`${indentOf(level)}}`);
-      w.line();
+  // ==========================================
+  // 1. 静的構造 (Classes, Structs, Enums)
+  // ==========================================
+  w.line('// --- 1. Static Structures ---');
+  const groups = nodes.filter(n => n.type === 'groupNode');
+  
+  for (const g of groups) {
+    emitAttributes(w, g.data.attributes, 0);
+    const kind = g.data.kind;
+    const name = g.data.label;
+    w.line(`${kind} ${name} {`);
+    
+    const children = nodes.filter(n => n.parentId === g.id);
+    const vars = children.filter(n => n.data.kind === 'variable' || n.data.kind === 'constant');
+    const methods = children.filter(n => n.data.kind === 'method');
+    
+    for (const v of vars) {
+      emitAttributes(w, v.data.attributes, 1);
+      const prefix = v.data.isPrivate ? 'private ' : '';
+      const vKind = v.data.kind === 'constant' ? 'const' : 'let';
+      const vType = v.data.typeDetail ? `: ${v.data.typeDetail}` : '';
+      w.line(`    ${prefix}${vKind} ${v.data.label}${vType};`);
     }
 
-    const blocks = scopeNodes.filter(isBlock);
-    if (!blocks.length) return;
+    if (vars.length > 0 && methods.length > 0) w.line();
 
-    const priv = blocks.filter(b => !!b.data.isPrivate);
-    const pub = blocks.filter(b => !b.data.isPrivate);
+    for (const m of methods) {
+      emitAttributes(w, m.data.attributes, 1);
+      const prefix = m.data.isPrivate ? 'private ' : '';
+      const mArgs = formatArgs(m.data.args);
+      const mType = m.data.typeDetail && m.data.typeDetail !== 'void' ? `: ${m.data.typeDetail}` : '';
+      w.line(`    ${prefix}func ${m.data.label}(${mArgs})${mType};`);
+    }
 
-    const emitBlocks = (title: 'private' | 'public', list: Node[]) => {
-      if (!list.length) return;
-      w.line(`${indentOf(level)}${title}:`);
-      for (const b of list) {
-        const d = b.data as any;
-        emitAttributes(w, d.attributes, level + 1);
-
-        if (d.kind === 'constant') {
-          w.line(`${indentOf(level + 1)}${d.label},`);
-          continue;
-        }
-
-        const type = String(d.typeDetail ?? 'void');
-        const name = String(d.label ?? '');
-
-        if (d.kind === 'method') {
-          const argsStr = formatArgs(d.args);
-          w.line(`${indentOf(level + 1)}${type} ${name}(${argsStr});`);
-        } else {
-          w.line(`${indentOf(level + 1)}${type} ${name};`);
-        }
-      }
-    };
-
-    emitBlocks('private', priv);
-    if (priv.length && pub.length) w.line();
-    emitBlocks('public', pub);
+    w.line(`}`);
+    w.line();
   }
 
-  emitScope(childrenOf(undefined), 0);
+  // ==========================================
+  // 2. タグ定義 (Tag Definitions)
+  // ==========================================
+  if (tagDefinitions.length > 0) {
+    w.line('// --- 2. Tag Definitions (Petri Net) ---');
+    
+    const groupedTags = new Map<string, TagDefinition[]>();
+    for (const t of tagDefinitions) {
+      if (!groupedTags.has(t.groupName)) groupedTags.set(t.groupName, []);
+      if (t.tagName) groupedTags.get(t.groupName)!.push(t);
+    }
+    
+    for (const [group, tags] of groupedTags.entries()) {
+      w.line(`tagGroup ${group} {`);
+      for (const t of tags) {
+        if (t.description) w.line(`    // ${t.description.replace(/\n/g, ' ')}`);
+        w.line(`    tag ${t.tagName};`);
+      }
+      w.line(`}`);
+      w.line();
+    }
+  }
 
+  // ==========================================
+  // 3. 状態遷移 (Petri Net Transitions)
+  // ==========================================
+  const transitions = petriNodes.filter(n => n.type === 'transitionNode');
+  if (transitions.length > 0) {
+    w.line('// --- 3. State Transitions (Petri Net) ---');
+
+    for (const trans of transitions) {
+      const boundFunc = trans.data.boundFunctionId ? nodes.find(n => n.id === trans.data.boundFunctionId) : null;
+      const parentClass = boundFunc?.parentId ? nodes.find(n => n.id === boundFunc.parentId) : null;
+      
+      const funcName = boundFunc 
+        ? `${parentClass ? parentClass.data.label + '.' : ''}${boundFunc.data.label}`
+        : 'none';
+
+      const inEdges = petriEdges.filter(e => e.target === trans.id);
+      const outEdges = petriEdges.filter(e => e.source === trans.id);
+      
+      const inPlaces = inEdges.map(e => petriNodes.find(n => n.id === e.source)).filter(Boolean) as Node[];
+      const outPlaces = outEdges.map(e => petriNodes.find(n => n.id === e.target)).filter(Boolean) as Node[];
+
+      const formatPlace = (p: Node) => {
+        if (p.data.assignedTagType && p.data.assignedTargetName) {
+           return p.data.assignedTargetName; // 例: "Active" や "UserState" などを出力
+        }
+        return `[Unassigned:${p.data.label}]`;
+      };
+
+      const inStr = inPlaces.map(formatPlace).join(', ');
+      const outStr = outPlaces.map(formatPlace).join(', ');
+
+      w.line(`transition ${trans.data.label} {`);
+      if (inStr) w.line(`    require: [${inStr}]`);
+      w.line(`    call:    ${funcName}`);
+      if (outStr) w.line(`    grant:   [${outStr}]`);
+      w.line(`}`);
+      w.line();
+    }
+  }
+
+  // ==========================================
+  // 4. 実行フロー (Execution Flows)
+  // ==========================================
   const methods = nodes.filter(n => n.type === 'blockNode' && n.data.kind === 'method');
-  const methodIds = new Set(methods.map(m => m.id));
-  const depEdges = edges.filter(
-    e => methodIds.has(e.source) && methodIds.has(e.target) && (e.data?.role ?? 'dependency') === 'dependency'
-  );
-
-  if (depEdges.length) {
-    w.line('// ---------------------------');
-    w.line('// Transaction Flow (Dependencies)');
-    w.line('// ---------------------------');
+  const depEdges = edges.filter(e => e.data?.role === 'dependency' || e.data?.role === 'call');
+  
+  if (methods.length > 0 && depEdges.length > 0) {
+    w.line('// --- 4. Execution Flows ---');
 
     const nextMap = new Map<string, string[]>();
     const indeg = new Map<string, number>();
+
     for (const m of methods) indeg.set(m.id, 0);
 
     for (const e of depEdges) {
@@ -131,17 +176,15 @@ export function generateBoxyhCode(nodes: Node[], edges: Edge[]): string {
           const label = String(curr.data.label ?? '');
           const type = String(curr.data.typeDetail ?? 'void');
           w.line(`    -> ${className}.${label}(${type})`);
-        } else {
-          w.line(`    -> ${String(curr.data.label ?? '')}(${String(curr.data.typeDetail ?? 'void')})`);
         }
 
-        for (const nxt of nextMap.get(curr.id) ?? []) {
-          const n = nodes.find(x => x.id === nxt);
-          if (n) queue.push(n);
+        const nexts = nextMap.get(curr.id) ?? [];
+        for (const nId of nexts) {
+          const nNode = nodes.find(n => n.id === nId);
+          if (nNode) queue.push(nNode);
         }
       }
-
-      w.line('}');
+      w.line(`}`);
       w.line();
     }
   }

@@ -24,7 +24,7 @@ interface PropertyPanelProps {
   onAssignEvent: (transitionId: string, functionId: string | null) => void;
   nodes: Node[];
   edges: Edge[];
-  classNodes: Node[]; // ★ 追加
+  classNodes: Node[];
   tagDefinitions: TagDefinition[];
 }
 
@@ -50,7 +50,6 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
   const currentAvailableAttributes = selectedNode ? (ATTRIBUTE_MAP[selectedNode.data.kind as string] ?? []) : [];
   const currentTypeDetail = (selectedNode?.data.typeDetail as string) || '';
 
-  // タグをエクスプローラーと同等の階層関係にデータ整形
   const compiledGroupedTags = useMemo(() => {
     const map: Record<string, TagDefinition[]> = {};
     tagDefinitions.forEach((tag) => {
@@ -85,10 +84,10 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
       {selectedNode ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', flexGrow: 1 }}>
           
-          {/* 基本情報：名前 */}
+          {/* ★ 基本情報：名前（プレースとトランジションは手動入力禁止に修正） */}
           <div>
             <label style={styles.label}>{nameLabel}</label>
-            {isPetriTab && selectedNode.type === 'placeNode' ? (
+            {isPetriTab && (selectedNode.type === 'placeNode' || selectedNode.type === 'transitionNode') ? (
                 <div style={{ ...styles.input, background: '#f1f3f5', color: '#6c757d', cursor: 'not-allowed' }}>
                     {selectedNode.data.label as string}
                 </div>
@@ -97,7 +96,6 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
             )}
           </div>
 
-          {/* ペトリネットのPlaceに対するエクスプローラー木構造を模した割当UI */}
           {isPetriTab && selectedNode.type === 'placeNode' && (
             <div style={{ padding: '10px', background: '#e7f3ff', border: '1px solid #b8daff', borderRadius: '4px' }}>
               <label style={{ ...styles.label, color: '#004085' }}>🔗 グループ / タグ の割り当て</label>
@@ -118,7 +116,6 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
             </div>
           )}
 
-          {/* ペトリネット：プレースの型設定（自動同期） */}
           {isPetriTab && selectedNode.type === 'placeNode' && (
             <div style={{ padding: '10px', background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '4px' }}>
               <label style={styles.label}>プレースの型 (Type)</label>
@@ -131,7 +128,6 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
             </div>
           )}
 
-          {/* クラス図：アクセス修飾子 */}
           {isClassTab && selectedNode.type === 'blockNode' && selectedNode.data.kind !== 'constant' && (
             <div>
               <label style={styles.label}>アクセス修飾子</label>
@@ -142,12 +138,10 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
             </div>
           )}
 
-          {/* クラス図：引数エディタ */}
           {selectedNode.type === 'blockNode' && selectedNode.data.kind === 'method' && (
             <MethodArgsEditor currentArgs={currentArgs} inNodeTypes={inNodeTypes} validInNodes={validInNodes} addArg={addArg} removeArg={removeArg} updateArg={updateArg} updateSelectedNode={updateSelectedNode} styles={styles} />
           )}
 
-          {/* クラス図：戻り値/型 */}
           {isClassTab && selectedNode.type === 'blockNode' && selectedNode.data.kind !== 'constant' && (
             <div>
               <label style={styles.label}>型 / 戻り値</label>
@@ -158,25 +152,16 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
             </div>
           )}
 
-          {/* クラス図：属性(@)エディタ */}
           {isClassTab && selectedNode.data.kind !== 'constant' && (
             <AttributeEditor currentAttributes={currentAttributes} currentAvailableAttributes={currentAvailableAttributes} editingAttrId={editingAttrId} setEditingAttrId={setEditingAttrId} addAttribute={addAttribute} removeAttribute={removeAttribute} updateAttrParam={updateAttrParam} styles={styles} />
           )}
 
-          {/* ★ ペトリネット：トランジションの関数割り当て ＆ 割り当て関数の詳細表示 */}
           {isPetriTab && selectedNode.type === 'transitionNode' && (() => {
             const boundFunc = functionNodes.find(fn => fn.id === selectedNode.data.boundFunctionId);
             const argsList = (boundFunc?.data.args as MethodArg[]) || [];
             
-            // ★ classNodes から親クラスを検索するように修正
-            const parentContainer = boundFunc?.parentId 
-              ? classNodes.find(n => n.id === boundFunc.parentId) 
-              : null;
-
-            // 所属クラス.関数名 の形式を生成 (所属がない場合は関数名のみ)
-            const fullFunctionName = parentContainer 
-              ? `${parentContainer.data.label}.${boundFunc?.data.label}` 
-              : (boundFunc?.data.label as string);
+            const parentContainer = boundFunc?.parentId ? classNodes.find(n => n.id === boundFunc.parentId) : null;
+            const fullFunctionName = parentContainer ? `${parentContainer.data.label}.${boundFunc?.data.label}` : (boundFunc?.data.label as string);
 
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -185,7 +170,6 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
                   <select style={styles.input} value={(selectedNode.data.boundFunctionId as string) ?? ''} onChange={(e) => onAssignEvent(selectedNode.id, e.target.value || null)}>
                     <option value="">--- なし ---</option>
                     {functionNodes.map((fn) => {
-                      // ★ セレクトボックス内も classNodes から親クラスを検索
                       const parent = fn.parentId ? classNodes.find(n => n.id === fn.parentId) : null;
                       const displayName = parent ? `${parent.data.label}.${fn.data.label}` : String(fn.data.label);
                       return (
@@ -197,7 +181,6 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
                   </select>
                 </div>
 
-                {/* 割り当てられている関数の情報を展開するパネル */}
                 {boundFunc && (
                   <div style={{ padding: '10px', background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '4px', fontSize: '12px' }}>
                     <div style={{ fontWeight: 'bold', color: '#2f9e44', marginBottom: '6px', borderBottom: '1px solid #e9ecef', paddingBottom: '2px' }}>
@@ -230,7 +213,6 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
             );
           })()}
 
-          {/* 共通：接続状況表示 */}
           <div style={{ borderTop: '1px solid #dee2e6', paddingTop: '15px', marginTop: 'auto' }}>
             <h5 style={{ fontSize: '13px', margin: '0 0 10px 0', color: '#333' }}>接続状況</h5>
             <div style={{ marginBottom: '10px' }}>
