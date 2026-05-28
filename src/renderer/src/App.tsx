@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { CustomFlowCanvas } from './components/CustomFlowCanvas';
 import { Sidebar } from './components/Sidebar';
 import { PropertyPanel } from './components/PropertyPanel';
