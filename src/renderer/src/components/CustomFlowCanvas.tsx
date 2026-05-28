@@ -18,14 +18,15 @@ interface CustomFlowCanvasProps {
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
   viewMode: 'all' | 'no-dependency' | 'depth';
+  onOpenPetriNet?: (nodeId: string) => void;
+  definedPetriNetIds?: string[]; // ★ 新規追加
 }
 
 export const CustomFlowCanvas: React.FC<CustomFlowCanvasProps> = ({
   nodes, edges, onNodesChange, onConnect, isValidConnection,
-  onNodeClick, onEdgeClick, onEdgeContextMenu, onPaneClick, selectedNodeId, viewMode
+  onNodeClick, onEdgeClick, onEdgeContextMenu, onPaneClick, selectedNodeId, viewMode, onOpenPetriNet, definedPetriNetIds = []
 }) => {
   
-  // 切り出したインタラクションロジックを読み込む
   const {
     containerRef, transform, isDraggingCanvas, connectingStartNodeId, mousePos,
     handleWheel, handleMouseDown, handleMouseMove, handleMouseUp,
@@ -48,27 +49,31 @@ export const CustomFlowCanvas: React.FC<CustomFlowCanvasProps> = ({
         .animated-edge { animation: dashdraw 0.5s linear infinite; }
       `}</style>
 
-      {/* 1. 背景ドット・マーカー定義レイヤー */}
       <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0 }}>
         <defs>
           <pattern id="dots" x={transform.x % (20 * transform.scale)} y={transform.y % (20 * transform.scale)} width={20 * transform.scale} height={20 * transform.scale} patternUnits="userSpaceOnUse">
             <circle fill="#adb5bd" cx={2 * transform.scale} cy={2 * transform.scale} r={1 * transform.scale}></circle>
           </pattern>
-          {/* マーカー定義 (一部省略、元のファイルを維持してください) */}
           <marker id="arrowhead" markerWidth="14" markerHeight="10" refX="10" refY="5" orient="auto"><polygon points="0 0, 12 5, 0 10" fill="#333" /></marker>
           <marker id="arrowhead-selected" markerWidth="14" markerHeight="10" refX="10" refY="5" orient="auto"><polygon points="0 0, 12 5, 0 10" fill="#007bff" /></marker>
+          <marker id="triangle-white" markerWidth="14" markerHeight="14" refX="14" refY="7" orient="auto"><polygon points="0 0, 14 7, 0 14" fill="#fff" stroke="#333" strokeWidth="2" /></marker>
+          <marker id="triangle-white-selected" markerWidth="14" markerHeight="14" refX="14" refY="7" orient="auto"><polygon points="0 0, 14 7, 0 14" fill="#fff" stroke="#007bff" strokeWidth="2" /></marker>
+          <marker id="arrowhead-call" markerWidth="14" markerHeight="10" refX="10" refY="5" orient="auto"><polygon points="0 0, 12 5, 0 10" fill="#0d6efd" /></marker>
+          <marker id="arrowhead-call-selected" markerWidth="14" markerHeight="10" refX="10" refY="5" orient="auto"><polygon points="0 0, 12 5, 0 10" fill="#0a58ca" /></marker>
+          <marker id="arrowhead-reference" markerWidth="14" markerHeight="10" refX="10" refY="5" orient="auto"><polygon points="0 0, 12 5, 0 10" fill="#198754" /></marker>
+          <marker id="arrowhead-reference-selected" markerWidth="14" markerHeight="10" refX="10" refY="5" orient="auto"><polygon points="0 0, 12 5, 0 10" fill="#146c43" /></marker>
+          <marker id="arrowhead-copy" markerWidth="14" markerHeight="10" refX="10" refY="5" orient="auto"><polygon points="0 0, 12 5, 0 10" fill="#fd7e14" /></marker>
+          <marker id="arrowhead-copy-selected" markerWidth="14" markerHeight="10" refX="10" refY="5" orient="auto"><polygon points="0 0, 12 5, 0 10" fill="#e85e0c" /></marker>
         </defs>
         <rect x="0" y="0" width="100%" height="100%" fill="url(#dots)" />
       </svg>
 
-      {/* ドラッグ・ズームによって移動するメインレイヤー */}
       <div style={{
         position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
         transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
         transformOrigin: '0 0', pointerEvents: 'none'
       }}>
         
-        {/* 2. エッジ（線）レイヤー */}
         <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none', zIndex: 50 }}>
           {edges.map(edge => {
             const sourceNode = nodes.find(n => n.id === edge.source);
@@ -105,20 +110,28 @@ export const CustomFlowCanvas: React.FC<CustomFlowCanvasProps> = ({
 
             return (
               <g key={edge.id} style={{ opacity: edge.style?.opacity ?? 1, transition: 'opacity 0.2s ease' }}>
-                {/* 当たり判定用の透明な太い線 */}
                 <path d={d} fill="none" stroke="transparent" strokeWidth="15" pointerEvents="stroke" style={{ cursor: 'pointer' }}
                   onClick={(e) => { e.stopPropagation(); onEdgeClick(e, edge); }}
                   onContextMenu={(e) => { e.stopPropagation(); onEdgeContextMenu(e, edge); }} />
                 
-                {/* 実際の表示用の線 */}
                 <path d={d} fill="none" stroke={edge.style?.stroke || '#333'} strokeWidth={edge.style?.strokeWidth || 2}
                   strokeDasharray={edge.style?.strokeDasharray || 'none'} markerEnd={edge.style?.markerEnd} markerStart={edge.style?.markerStart}
                   className={edge.animated ? 'animated-edge' : ''} pointerEvents="none" />
+                
+                {edge.label && (
+                  <text
+                    x={(startX + endX) / 2} y={(sy + ty) / 2 - 8}
+                    textAnchor="middle" fill={edge.labelStyle?.fill || '#333'}
+                    fontSize={edge.labelStyle?.fontSize || 10} fontWeight={edge.labelStyle?.fontWeight || 'normal'}
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    {edge.label}
+                  </text>
+                )}
               </g>
             );
           })}
 
-          {/* 結線中の仮線 */}
           {connectingStartNodeId && (() => {
             const startNode = nodes.find(n => n.id === connectingStartNodeId);
             if (!startNode) return null;
@@ -131,7 +144,6 @@ export const CustomFlowCanvas: React.FC<CustomFlowCanvasProps> = ({
           })()}
         </svg>
 
-        {/* 3. ノードレイヤー */}
         {nodes.map(node => {
           const absPos = getAbsolutePosition(node.id, nodes);
           const isSelected = node.id === selectedNodeId;
@@ -150,6 +162,8 @@ export const CustomFlowCanvas: React.FC<CustomFlowCanvasProps> = ({
                 onHandleMouseDown={(e, type) => onHandleMouseDownLocal(e, node.id, type)}
                 onResizeStart={(e) => onResizeStartLocal(e, node.id)}
                 onSizeChange={handleNodeSizeChange}
+                onOpenPetriNet={onOpenPetriNet}
+                hasPetriNet={definedPetriNetIds.includes(node.id)} // ★ 新規追加
               />
             </div>
           );

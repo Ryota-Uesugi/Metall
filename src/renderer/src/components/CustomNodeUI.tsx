@@ -10,14 +10,15 @@ interface CustomNodeUIProps {
   onResizeStart: (e: React.MouseEvent) => void;
   onSizeChange?: (id: string, width: number, height: number) => void;
   viewMode: 'all' | 'no-dependency' | 'depth';
+  onOpenPetriNet?: (nodeId: string) => void;
+  hasPetriNet?: boolean; // ★ 新規追加
 }
 
-export const CustomNodeUI: React.FC<CustomNodeUIProps> = ({ 
-  node, isSelected, onHandleMouseDown, onResizeStart, onSizeChange, viewMode 
+export const CustomNodeUI: React.FC<CustomNodeUIProps> = ({
+  node, isSelected, onHandleMouseDown, onResizeStart, onSizeChange, viewMode, onOpenPetriNet, hasPetriNet
 }) => {
   const blockRef = useRef<HTMLDivElement>(null);
 
-  // DOMの実際のサイズを監視して状態に反映（自動サイズ調整）
   useEffect(() => {
     if (node.type !== 'blockNode' || !blockRef.current || !onSizeChange) return;
     const observer = new ResizeObserver(entries => {
@@ -41,12 +42,12 @@ export const CustomNodeUI: React.FC<CustomNodeUIProps> = ({
 
   const renderHandles = () => showHandles && (
     <>
-      <div style={{ position: 'absolute', top: '50%', left: 0, transform: 'translate(-50%, -50%)', zIndex: 20 }} 
-           data-handle-node-id={node.id} data-handle-type="target" onMouseDown={(e) => onHandleMouseDown(e, 'target')}>
+      <div style={{ position: 'absolute', top: '50%', left: 0, transform: 'translate(-50%, -50%)', zIndex: 20 }}
+        data-handle-node-id={node.id} data-handle-type="target" onMouseDown={(e) => onHandleMouseDown(e, 'target')}>
         <div style={handleStyle} />
       </div>
-      <div style={{ position: 'absolute', top: '50%', right: 0, transform: 'translate(50%, -50%)', zIndex: 20 }} 
-           data-handle-node-id={node.id} data-handle-type="source" onMouseDown={(e) => onHandleMouseDown(e, 'source')}>
+      <div style={{ position: 'absolute', top: '50%', right: 0, transform: 'translate(50%, -50%)', zIndex: 20 }}
+        data-handle-node-id={node.id} data-handle-type="source" onMouseDown={(e) => onHandleMouseDown(e, 'source')}>
         <div style={handleStyle} />
       </div>
     </>
@@ -54,7 +55,6 @@ export const CustomNodeUI: React.FC<CustomNodeUIProps> = ({
 
   const currentBorderColor = isSelected ? 'rgba(0, 123, 255, 1)' : '#333';
 
-  // --- ペトリネット: プレース ---
   if (node.type === 'placeNode') {
     return (
       <div style={{
@@ -66,8 +66,7 @@ export const CustomNodeUI: React.FC<CustomNodeUIProps> = ({
       </div>
     );
   }
-  
-  // --- ペトリネット: トランジション ---
+
   if (node.type === 'transitionNode') {
     return (
       <div style={{
@@ -81,8 +80,7 @@ export const CustomNodeUI: React.FC<CustomNodeUIProps> = ({
       </div>
     );
   }
-  
-  // --- クラス図: グループ (Class/Struct/Enum) ---
+
   if (node.type === 'groupNode') {
     const isStruct = node.data.kind === 'struct';
     const isEnum = node.data.kind === 'enum';
@@ -91,19 +89,38 @@ export const CustomNodeUI: React.FC<CustomNodeUIProps> = ({
     let bgColor = isInstance ? 'rgba(230, 255, 237, 0.95)' : isStruct ? 'rgba(255, 245, 245, 0.95)' : isEnum ? 'rgba(245, 240, 255, 0.95)' : 'rgba(248, 249, 250, 0.75)';
     let borderColor = isInstance ? 'rgba(40, 167, 69, 0.95)' : isStruct ? 'rgba(220, 53, 69, 0.95)' : isEnum ? 'rgba(111, 66, 193, 0.95)' : 'rgba(173, 181, 189, 0.95)';
     let labelColor = isInstance ? '#155724' : isStruct ? '#dc3545' : isEnum ? '#6f42c1' : '#495057';
-    
+
     const activeBorderColor = isSelected ? 'rgba(0, 123, 255, 1)' : borderColor;
 
     return (
-      <div style={{ 
-        width: node.width || 300, height: node.height || 200, boxSizing: 'border-box', padding: '15px', borderRadius: '8px', 
-        background: bgColor, border: `2px ${isStruct ? 'dotted' : 'dashed'} ${activeBorderColor}`, position: 'relative' 
+      <div style={{
+        width: node.width || 300, height: node.height || 200, boxSizing: 'border-box', padding: '15px', borderRadius: '8px',
+        background: bgColor, border: `2px ${isStruct ? 'dotted' : 'dashed'} ${activeBorderColor}`, position: 'relative'
       }}>
+
+        {/* ★ ボタンの色とアイコンを条件で切り替え */}
+        <div
+          onClick={(e) => { e.stopPropagation(); onOpenPetriNet && onOpenPetriNet(node.id); }}
+          style={{
+            position: 'absolute', top: '10px', right: '10px',
+            background: hasPetriNet ? '#e6fce5' : '#e7f3ff',
+            color: hasPetriNet ? '#2b8a3e' : '#007bff',
+            borderRadius: '4px', padding: '2px 8px', fontSize: '10px', cursor: 'pointer', zIndex: 30,
+            border: hasPetriNet ? '1px solid #b2f2bb' : '1px solid #b8daff',
+            fontWeight: 'bold'
+          }}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = hasPetriNet ? '#d3f9d8' : '#d0e7ff'}
+          onMouseLeave={e => e.currentTarget.style.backgroundColor = hasPetriNet ? '#e6fce5' : '#e7f3ff'}
+          title="このクラスのペトリネットを定義する"
+        >
+          {hasPetriNet ? '✓ PetriNet' : '＋ PetriNet'}
+        </div>
+
         {renderHandles()}
         <div style={{ fontWeight: 'bold', fontSize: '14px', borderBottom: '1px solid #ccc', paddingBottom: '5px', marginBottom: '10px' }}>
-          {attrs.map((attr: any) => { 
-            const attrStr = formatAttribute(attr.type, attr.params); 
-            return attrStr ? <span key={attr.id} style={{ color: isInstance ? '#28a745' : '#d63384', fontSize: '11px', display: 'block' }}>{attrStr}</span> : null; 
+          {attrs.map((attr: any) => {
+            const attrStr = formatAttribute(attr.type, attr.params);
+            return attrStr ? <span key={attr.id} style={{ color: isInstance ? '#28a745' : '#d63384', fontSize: '11px', display: 'block' }}>{attrStr}</span> : null;
           })}
           <span style={{ color: labelColor, fontSize: '10px', marginRight: '5px' }}>[{node.data.kind}]</span>{node.data.label}
         </div>
@@ -113,9 +130,8 @@ export const CustomNodeUI: React.FC<CustomNodeUIProps> = ({
         }} onMouseDown={onResizeStart} />
       </div>
     );
-  } 
-  
-  // --- クラス図: ブロック (Method/Variable/Constant) ---
+  }
+
   const isMethod = node.data.kind === 'method';
   const blockBorderColor = isSelected ? 'rgba(0, 123, 255, 1)' : 'rgba(51, 51, 51, 0.98)';
   const argsList = Array.isArray(node.data.args) ? node.data.args : [];
@@ -127,9 +143,9 @@ export const CustomNodeUI: React.FC<CustomNodeUIProps> = ({
       minWidth: '140px', minHeight: '60px', width: 'max-content', height: 'auto', boxSizing: 'border-box', position: 'relative', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
     }}>
       {renderHandles()}
-      {attrs.map((attr: any) => { 
-        const attrStr = formatAttribute(attr.type, attr.params); 
-        return attrStr ? <div key={attr.id} style={{ fontSize: '10px', color: '#d63384' }}>{attrStr}</div> : null; 
+      {attrs.map((attr: any) => {
+        const attrStr = formatAttribute(attr.type, attr.params);
+        return attrStr ? <div key={attr.id} style={{ fontSize: '10px', color: '#d63384' }}>{attrStr}</div> : null;
       })}
       <div style={{ fontWeight: 'bold', fontSize: '13px', color: '#000', display: 'flex', alignItems: 'center' }}>
         {node.data.isPrivate && <span style={{ color: '#dc3545', fontSize: '10px', marginRight: '4px' }}>🔒</span>}

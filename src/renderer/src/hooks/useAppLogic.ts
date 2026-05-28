@@ -10,9 +10,10 @@ import { useGraphView } from './useGraphView';
 
 export function useAppLogic() {
   const {
-    activeTab, setActiveTab,
+    activeTab, setActiveTab, openTabs, setOpenTabs,
     nodes, setNodes, edges, setEdges,
-    petriNodes, setPetriNodes, petriEdges, setPetriEdges,
+    petriDataMap, setPetriDataMap,
+    petriNodes, setPetriNodes, petriEdges,
     currentNodes, currentEdges, setCurrentNodes, setCurrentEdges,
     tagDefinitions, setTagDefinitions
   } = useGraphState();
@@ -25,7 +26,7 @@ export function useAppLogic() {
   const [previewCode, setPreviewCode] = useState<string | null>(null);
 
   const isClassTab = activeTab === 'class';
-  const isPetriTab = activeTab === 'petri';
+  const isPetriTab = activeTab !== 'class';
 
   useGraphAutomations({
     isClassTab, nodes, edges, petriNodes, petriEdges, setNodes, setPetriNodes
@@ -37,10 +38,22 @@ export function useAppLogic() {
     isClassTab, isPetriTab, selectedNodeId, selectedEdgeId, currentNodes, currentEdges, nodes
   });
 
-  const handleTabSwitch = useCallback((tab: 'class' | 'petri') => {
-    setActiveTab(tab);
+  const handleTabSwitch = useCallback((tabId: string) => {
+    setActiveTab(tabId);
     clearSelection();
   }, [setActiveTab, clearSelection]);
+
+  const openPetriNetTab = useCallback((classId: string) => {
+    setOpenTabs(prev => prev.includes(classId) ? prev : [...prev, classId]);
+    setActiveTab(classId);
+    clearSelection();
+  }, [setOpenTabs, setActiveTab, clearSelection]);
+
+  const closeTab = useCallback((classId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setOpenTabs(prev => prev.filter(id => id !== classId));
+    if (activeTab === classId) setActiveTab('class');
+  }, [activeTab, setOpenTabs, setActiveTab]);
 
   const onNodeClick = useCallback((_e: React.MouseEvent, node: Node) => selectNode(node.id), [selectNode]);
   const onEdgeClick = useCallback((_e: React.MouseEvent, edge: Edge) => selectEdge(edge.id), [selectEdge]);
@@ -93,7 +106,7 @@ export function useAppLogic() {
     const id = `${type}_${Math.random().toString(36).substr(2, 5)}`;
     setCurrentNodes((nds) => nds.concat({
       id, type, position: { x: 100, y: 100 },
-      data: { kind: type, label: type === 'placeNode' ? 'Tag' : 'Action', attributes: [], typeDetail: '', isInstance: false, isPrivate: false, args: [], boundFunctionId: null, assignedTagType: null, assignedTargetName: '' },
+      data: { kind: type, label: type === 'placeNode' ? 'Tag' : 'Action (未設定)', attributes: [], typeDetail: '', isInstance: false, isPrivate: false, args: [], boundFunctionId: null, assignedTagType: null, assignedTargetName: '' },
     }));
   }, [setCurrentNodes]);
 
@@ -212,20 +225,22 @@ export function useAppLogic() {
     }
   }, [petriNodes, setNodes, setPetriNodes]);
 
-  const handleSave = useCallback(() => saveProjectFile(nodes, edges, petriNodes, petriEdges, tagDefinitions), [nodes, edges, petriNodes, petriEdges, tagDefinitions]);
+  const handleSave = useCallback(() => saveProjectFile(nodes, edges, petriDataMap), [nodes, edges, petriDataMap]);
   
   const handleLoad = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     loadProjectFile(file, (data) => {
-      setNodes(data.nodes); setEdges(data.edges); setPetriNodes(data.petriNodes); setPetriEdges(data.petriEdges); 
-      setTagDefinitions(data.tagDefinitions || []);
+      setNodes(data.nodes); 
+      setEdges(data.edges); 
+      setPetriDataMap(data.petriDataMap); 
+      setOpenTabs([]); 
+      setActiveTab('class');
       clearSelection();
     }, () => alert('不正なファイル形式です'));
     e.target.value = '';
-  }, [setNodes, setEdges, setPetriNodes, setPetriEdges, setTagDefinitions, clearSelection]);
+  }, [setNodes, setEdges, setPetriDataMap, setActiveTab, setOpenTabs, clearSelection]);
 
-  // ★ 修正箇所: ペトリネット情報も含めてコードジェネレータへ渡す
   const handleGenerateCode = useCallback(() => {
     setPreviewCode(generateBoxyhCode(nodes, edges, petriNodes, petriEdges, tagDefinitions));
   }, [nodes, edges, petriNodes, petriEdges, tagDefinitions]);
@@ -254,7 +269,7 @@ export function useAppLogic() {
     activeTab, isClassTab, isPetriTab, viewMode, setViewMode, depthLimit, setDepthLimit, previewCode, setPreviewCode,
     displayNodes, displayEdges, selectedNodeId, selectedEdgeId, selectedNode, selectedEdge,
     editingAttrId, setEditingAttrId, availableEvents, functionNodes, currentNodes, currentEdges, setCurrentNodes,
-    tagDefinitions, nodes,
+    tagDefinitions, nodes, openTabs, openPetriNetTab, closeTab, petriDataMap,
     addTagGroup, addTagDefinition, deleteTagGroup, deleteTagDefinition, updateTagDescription,
     handleTabSwitch, onPaneClick, onNodeClick, onEdgeClick, onEdgeContextMenu, onAssignEvent,
     isValidConnection, onConnect, reverseSelectedEdge, deleteSelectedElement,

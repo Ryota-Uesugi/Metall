@@ -1,18 +1,19 @@
-// src/model/graphTypes.ts
 import type { CSSProperties } from 'react';
 
 export type Position = { x: number; y: number };
+
 export type NodeType = 'groupNode' | 'blockNode' | 'placeNode' | 'transitionNode';
+
 export type ClassKind = 'class' | 'struct' | 'enum' | 'method' | 'variable' | 'constant';
 export type NodeKind = ClassKind | 'placeNode' | 'transitionNode' | (string & {});
+
 export type MethodArg = { id: string; type: string; name: string };
 
-// ★ 新設: タグ定義（マスターデータ）の型
 export type TagDefinition = {
     id: string;
-    groupName: string; // グループ名
-    tagName: string;   // タグ名
-    description: string; // 自由記述の補足
+    groupName: string;
+    tagName: string;
+    description: string;
 };
 
 export type AttributeType =
@@ -45,11 +46,8 @@ export type NodeData = {
     isPrivate?: boolean;
     args?: MethodArg[];
     boundFunctionId?: string | null;
-    
-    // ★ 追加: PlaceNodeが割り当てているタグの情報
-    assignedTagType?: 'group' | 'tag' | null; // グループ単位か、個別タグ単位か
-    assignedTargetName?: string;             // 割り当てられたグループ名またはタグ名
-    
+    assignedTagType?: 'group' | 'tag' | null;
+    assignedTargetName?: string;
     [key: string]: unknown;
 };
 
@@ -113,11 +111,18 @@ export type Connection = {
     target: string;
 };
 
-// ★ 拡張: 保存ファイルにタグ定義のリストを含める
+export type PetriNetData = {
+    nodes: Node[];
+    edges: Edge[];
+    tagDefinitions: TagDefinition[];
+};
+
 export type ProjectFile = {
     nodes: Node[];
     edges: Edge[];
-    petriNodes: Node[];
-    petriEdges: Edge[];
-    tagDefinitions: TagDefinition[]; // 追加
+    petriDataMap: Record<string, PetriNetData>;
+    // 過去互換性用
+    petriNodes?: Node[];
+    petriEdges?: Edge[];
+    tagDefinitions?: TagDefinition[];
 };

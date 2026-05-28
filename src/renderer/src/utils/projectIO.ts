@@ -3,34 +3,30 @@ import type { ProjectFile } from '../model/graphTypes';
 
 const isArray = Array.isArray;
 
-function isProjectFile(x: unknown): x is ProjectFile {
-  const o = x as any;
-  return !!o && isArray(o.nodes) && isArray(o.edges) && isArray(o.petriNodes) && isArray(o.petriEdges);
-}
-
 export function serializeProject(p: ProjectFile): string {
   return JSON.stringify(p, null, 2);
 }
 
 export function deserializeProject(json: string): ProjectFile {
   const parsed = JSON.parse(json);
+  const safeData: ProjectFile = {
+    nodes: isArray(parsed?.nodes) ? parsed.nodes : [],
+    edges: isArray(parsed?.edges) ? parsed.edges : [],
+    petriDataMap: parsed?.petriDataMap || {},
+  };
 
-  if (!isProjectFile(parsed)) {
-    return {
-      nodes: parsed?.nodes && isArray(parsed.nodes) ? parsed.nodes : [],
-      edges: parsed?.edges && isArray(parsed.edges) ? parsed.edges : [],
-      petriNodes: parsed?.petriNodes && isArray(parsed.petriNodes) ? parsed.petriNodes : [],
-      petriEdges: parsed?.petriEdges && isArray(parsed.petriEdges) ? parsed.petriEdges : [],
-      tagDefinitions: parsed?.tagDefinitions && isArray(parsed.tagDefinitions) ? parsed.tagDefinitions : [], // ★ 追加
-    };
+  // 古いバージョンで保存されたファイルのマイグレーション
+  if (parsed.petriNodes || parsed.tagDefinitions) {
+    if (Object.keys(safeData.petriDataMap).length === 0) {
+      safeData.petriDataMap['legacy_migrated'] = {
+        nodes: isArray(parsed.petriNodes) ? parsed.petriNodes : [],
+        edges: isArray(parsed.petriEdges) ? parsed.petriEdges : [],
+        tagDefinitions: isArray(parsed.tagDefinitions) ? parsed.tagDefinitions : []
+      };
+    }
   }
-
-  // 比較的新しい形式でも、tagDefinitionsがなければ空配列を補償
-  if (!parsed.tagDefinitions) {
-    parsed.tagDefinitions = [];
-  }
-
-  return parsed;
+  
+  return safeData;
 }
 
 export function downloadText(filename: string, text: string, mime = 'application/json') {
