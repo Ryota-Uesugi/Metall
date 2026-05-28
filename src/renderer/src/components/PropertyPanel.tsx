@@ -7,7 +7,7 @@ import { MethodArgsEditor } from './property/MethodArgsEditor';
 import { AttributeEditor } from './property/AttributeEditor';
 
 interface PropertyPanelProps {
-  activeTab: 'class' | 'petri';
+  activeTab: string;
   selectedNode?: Node;
   selectedEdge?: Edge;
   editingAttrId: string | null;
@@ -43,12 +43,17 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
 
   const {
     isClassTab, isPetriTab, currentAttributes, inConnections, outConnections,
-    validInNodes, inNodeTypes, currentArgs, nameLabel, availableRoles, getNodeInfo, 
+    validInNodes, inNodeTypes, currentArgs, nameLabel, availableRoles, getNodeInfo,
     addArg, removeArg, updateArg
   } = usePropertyPanelLogic({ activeTab, selectedNode, selectedEdge, nodes, edges, updateSelectedNode });
 
   const currentAvailableAttributes = selectedNode ? (ATTRIBUTE_MAP[selectedNode.data.kind as string] ?? []) : [];
   const currentTypeDetail = (selectedNode?.data.typeDetail as string) || '';
+
+  // 同クラス内に存在する関数（メソッド）のみに絞り込む
+  const sameClassFunctions = useMemo(() => {
+    return functionNodes.filter((fn) => fn.parentId === activeTab);
+  }, [functionNodes, activeTab]);
 
   const compiledGroupedTags = useMemo(() => {
     const map: Record<string, TagDefinition[]> = {};
@@ -83,25 +88,41 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
 
       {selectedNode ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', flexGrow: 1 }}>
-          
-          {/* ★ 基本情報：名前（プレースとトランジションは手動入力禁止に修正） */}
+
+          {/* 基本情報：名前（プレースとトランジションは手動入力禁止） */}
           <div>
             <label style={styles.label}>{nameLabel}</label>
             {isPetriTab && (selectedNode.type === 'placeNode' || selectedNode.type === 'transitionNode') ? (
-                <div style={{ ...styles.input, background: '#f1f3f5', color: '#6c757d', cursor: 'not-allowed' }}>
-                    {selectedNode.data.label as string}
-                </div>
+              <div style={{ ...styles.input, background: '#f1f3f5', color: '#6c757d', cursor: 'not-allowed' }}>
+                {selectedNode.data.label as string}
+              </div>
             ) : (
-                <input style={styles.input} value={selectedNode.data.label as string} onChange={(e) => updateSelectedNode('label', e.target.value)} />
+              <input style={styles.input} value={selectedNode.data.label as string} onChange={(e) => updateSelectedNode('label', e.target.value)} />
             )}
           </div>
+
+          {/* ★ 修正: PlaceのIn/Out/Normalモード設定領域 */}
+          {isPetriTab && selectedNode.type === 'placeNode' && (
+            <div>
+              <label style={styles.label}>ペトリネットモード (InOut Mode)</label>
+              <select
+                style={styles.input}
+                value={(selectedNode.data.petriMode as string) || 'normal'}
+                onChange={(e) => updateSelectedNode('petriMode', e.target.value)}
+              >
+                <option value="normal">Normal (通常)</option>
+                <option value="in">In モード (入力)</option>
+                <option value="out">Out モード (出力)</option>
+              </select>
+            </div>
+          )}
 
           {isPetriTab && selectedNode.type === 'placeNode' && (
             <div style={{ padding: '10px', background: '#e7f3ff', border: '1px solid #b8daff', borderRadius: '4px' }}>
               <label style={{ ...styles.label, color: '#004085' }}>🔗 グループ / タグ の割り当て</label>
               <select style={styles.input} value={currentSelectValue} onChange={(e) => handleTagAssignmentChange(e.target.value)}>
                 <option value="">--- 未割り当て (Any) ---</option>
-                
+
                 {Object.entries(compiledGroupedTags).map(([groupName, tags]) => (
                   <React.Fragment key={groupName}>
                     <option value={`group::${groupName}`}>📦 {groupName} (グループ全体)</option>
@@ -120,10 +141,10 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
             <div style={{ padding: '10px', background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: '4px' }}>
               <label style={styles.label}>プレースの型 (Type)</label>
               <div style={{ fontSize: '11px', color: '#495057' }}>
-                 関数の結線による自動同期:<br/>
-                 <strong style={{ display: 'block', marginTop: '4px', color: '#007bff', fontSize: '13px' }}>
-                     {currentTypeDetail || 'void (未設定)'}
-                 </strong>
+                関数の結線による自動同期:<br />
+                <strong style={{ display: 'block', marginTop: '4px', color: '#007bff', fontSize: '13px' }}>
+                  {currentTypeDetail || 'void (未設定)'}
+                </strong>
               </div>
             </div>
           )}
@@ -157,19 +178,19 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
           )}
 
           {isPetriTab && selectedNode.type === 'transitionNode' && (() => {
-            const boundFunc = functionNodes.find(fn => fn.id === selectedNode.data.boundFunctionId);
+            const boundFunc = sameClassFunctions.find(fn => fn.id === selectedNode.data.boundFunctionId);
             const argsList = (boundFunc?.data.args as MethodArg[]) || [];
-            
+
             const parentContainer = boundFunc?.parentId ? classNodes.find(n => n.id === boundFunc.parentId) : null;
             const fullFunctionName = parentContainer ? `${parentContainer.data.label}.${boundFunc?.data.label}` : (boundFunc?.data.label as string);
 
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div>
-                  <label style={styles.label}>割り当てる関数</label>
+                  <label style={styles.label}>割り当てる関数 (同クラス内限定)</label>
                   <select style={styles.input} value={(selectedNode.data.boundFunctionId as string) ?? ''} onChange={(e) => onAssignEvent(selectedNode.id, e.target.value || null)}>
                     <option value="">--- なし ---</option>
-                    {functionNodes.map((fn) => {
+                    {sameClassFunctions.map((fn) => {
                       const parent = fn.parentId ? classNodes.find(n => n.id === fn.parentId) : null;
                       const displayName = parent ? `${parent.data.label}.${fn.data.label}` : String(fn.data.label);
                       return (
@@ -186,7 +207,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = (props) => {
                     <div style={{ fontWeight: 'bold', color: '#2f9e44', marginBottom: '6px', borderBottom: '1px solid #e9ecef', paddingBottom: '2px' }}>
                       📋 割り当て関数の詳細仕様
                     </div>
-                    
+
                     <div style={{ marginBottom: '4px', wordBreak: 'break-all' }}>
                       <strong>関数名:</strong> <span style={{ color: '#e64980', fontWeight: 'bold' }}>{fullFunctionName}</span>
                     </div>

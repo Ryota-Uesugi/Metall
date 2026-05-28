@@ -4,7 +4,7 @@ import type { Node, Edge, NodeData, MethodArg } from '../model/graphTypes';
 import { TYPE_OPTIONS, CLASS_EDGE_ROLES, BLOCK_EDGE_ROLES } from '../constants';
 
 interface UsePropertyPanelLogicProps {
-  activeTab: 'class' | 'petri';
+  activeTab: string; // ★ 修正: ペトリネット時はクラスIDが入るため string に変更
   selectedNode?: Node;
   selectedEdge?: Edge;
   nodes: Node[];
@@ -21,7 +21,7 @@ export function usePropertyPanelLogic({
   updateSelectedNode,
 }: UsePropertyPanelLogicProps) {
   const isClassTab = activeTab === 'class';
-  const isPetriTab = activeTab === 'petri';
+  const isPetriTab = activeTab !== 'class'; // ★ 修正: 'class' 以外ならペトリネットタブとする
 
   const currentAttributes = selectedNode?.data.attributes ?? [];
 
@@ -36,7 +36,6 @@ export function usePropertyPanelLogic({
     ['class', 'struct', 'enum', 'variable'].includes(n.data.kind as string)
   );
 
-  // ★ <string[]> を明示して型の欠落を防止
   const inNodeTypes = useMemo<string[]>(() => {
     const types = validInNodes
       .map((n) => (n.data.kind === 'variable' ? n.data.typeDetail : n.data.label) as string)
@@ -47,7 +46,6 @@ export function usePropertyPanelLogic({
     );
   }, [validInNodes]);
 
-  // ★ <string[]> を明示して型の欠落を防止
   const allAvailableTypes = useMemo<string[]>(() => {
     const customTypes = nodes
       .filter((n) => ['class', 'struct', 'enum'].includes(n.data.kind as string))
