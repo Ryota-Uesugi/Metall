@@ -9,22 +9,13 @@ export function serializeProject(p: ProjectFile): string {
 
 export function deserializeProject(json: string): ProjectFile {
   const parsed = JSON.parse(json);
+  
+  // ★ 修正: マイグレーション処理を削除し、純粋な型安全の担保のみ実施
   const safeData: ProjectFile = {
     nodes: isArray(parsed?.nodes) ? parsed.nodes : [],
     edges: isArray(parsed?.edges) ? parsed.edges : [],
     petriDataMap: parsed?.petriDataMap || {},
   };
-
-  // 古いバージョンで保存されたファイルのマイグレーション
-  if (parsed.petriNodes || parsed.tagDefinitions) {
-    if (Object.keys(safeData.petriDataMap).length === 0) {
-      safeData.petriDataMap['legacy_migrated'] = {
-        nodes: isArray(parsed.petriNodes) ? parsed.petriNodes : [],
-        edges: isArray(parsed.petriEdges) ? parsed.petriEdges : [],
-        tagDefinitions: isArray(parsed.tagDefinitions) ? parsed.tagDefinitions : []
-      };
-    }
-  }
   
   return safeData;
 }

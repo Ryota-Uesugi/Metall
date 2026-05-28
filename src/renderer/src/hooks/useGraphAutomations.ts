@@ -43,6 +43,9 @@ export function useGraphAutomations({
 
   // 2. ペトリネット: トランジションに割り当てられた関数の型・名前を自動伝播
   useEffect(() => {
+    // ★ 修正: クラス図タブの時は処理をスキップ（setPetriNodes が nodes を更新してしまうのを防ぐため）
+    if (isClassTab) return; 
+
     setPetriNodes((prevPetriNodes) => {
       let hasChanged = false;
       const nextNodes = [...prevPetriNodes];
@@ -50,7 +53,7 @@ export function useGraphAutomations({
 
       for (const trans of transitions) {
         
-        // ★ バインドされていない場合はデフォルト名にして以降の処理をスキップ
+        // バインドされていない場合はデフォルト名にして以降の処理をスキップ
         if (!trans.data.boundFunctionId) {
           if (trans.data.label !== 'Action (未設定)') {
             const transIdx = nextNodes.findIndex(n => n.id === trans.id);
@@ -65,7 +68,7 @@ export function useGraphAutomations({
         const funcNode = nodes.find((n) => n.id === trans.data.boundFunctionId);
         if (!funcNode) continue;
 
-        // ★ 名前 (label) の自動同期 (所属クラス.関数名)
+        // 名前 (label) の自動同期 (所属クラス.関数名)
         const parentNode = funcNode.parentId ? nodes.find(n => n.id === funcNode.parentId) : null;
         const expectedLabel = parentNode ? `${parentNode.data.label}.${funcNode.data.label}` : String(funcNode.data.label);
 
@@ -78,7 +81,7 @@ export function useGraphAutomations({
           }
         }
 
-        // --- 以下、既存のプレース型同期ロジック ---
+        // プレース型同期ロジック
         const args = (funcNode.data.args as MethodArg[]) || [];
         const validArgs = args.filter(a => a.type && a.type !== 'void');
         const retType = (funcNode.data.typeDetail as string) || 'void';
@@ -117,5 +120,5 @@ export function useGraphAutomations({
       }
       return hasChanged ? nextNodes : prevPetriNodes;
     });
-  }, [nodes, petriEdges, setPetriNodes]);
+  }, [isClassTab, nodes, petriEdges, setPetriNodes]);
 }

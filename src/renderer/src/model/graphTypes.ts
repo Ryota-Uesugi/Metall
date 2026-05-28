@@ -121,8 +121,4 @@ export type ProjectFile = {
     nodes: Node[];
     edges: Edge[];
     petriDataMap: Record<string, PetriNetData>;
-    // 過去互換性用
-    petriNodes?: Node[];
-    petriEdges?: Edge[];
-    tagDefinitions?: TagDefinition[];
 };

@@ -57,7 +57,11 @@ export function useAppLogic() {
 
   const onNodeClick = useCallback((_e: React.MouseEvent, node: Node) => selectNode(node.id), [selectNode]);
   const onEdgeClick = useCallback((_e: React.MouseEvent, edge: Edge) => selectEdge(edge.id), [selectEdge]);
-  const onPaneClick = useCallback(() => {}, []);
+  
+  // ★ 修正: 背景クリック時に選択状態を解除するように修正
+  const onPaneClick = useCallback(() => {
+    clearSelection();
+  }, [clearSelection]);
 
   const isValidConnection = useCallback((connection: Connection) => {
     const s = currentNodes.find((n) => n.id === connection.source);
