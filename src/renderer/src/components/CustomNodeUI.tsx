@@ -11,7 +11,7 @@ interface CustomNodeUIProps {
   onSizeChange?: (id: string, width: number, height: number) => void;
   viewMode: 'all' | 'no-dependency' | 'depth';
   onOpenPetriNet?: (nodeId: string) => void;
-  hasPetriNet?: boolean; // ★ 新規追加
+  hasPetriNet?: boolean;
 }
 
 export const CustomNodeUI: React.FC<CustomNodeUIProps> = ({
@@ -55,14 +55,35 @@ export const CustomNodeUI: React.FC<CustomNodeUIProps> = ({
 
   const currentBorderColor = isSelected ? 'rgba(0, 123, 255, 1)' : '#333';
 
+  // ★ 修正: Normal の時はバッジを非表示にし、In/Out の時のみバッジを表示する
   if (node.type === 'placeNode') {
+    const petriMode = (node.data.petriMode as string) || 'normal';
+    const isSpecialMode = petriMode === 'in' || petriMode === 'out';
+    const isOutMode = petriMode === 'out';
+
     return (
       <div style={{
         width: '60px', height: '60px', borderRadius: '50%', background: '#fff', border: `3px solid ${currentBorderColor}`,
-        display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', position: 'relative', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
       }}>
         {renderHandles()}
         <span style={{ fontSize: '10px', fontWeight: 'bold' }}>{node.data.label}</span>
+        
+        {/* In または Out の時だけバッジを表示する */}
+        {isSpecialMode && (
+          <span style={{ 
+            fontSize: '8px', 
+            fontWeight: 'bold', 
+            color: isOutMode ? '#fd7e14' : '#007bff', 
+            marginTop: '1px',
+            background: isOutMode ? '#fff3e6' : '#e7f3ff',
+            padding: '1px 3px',
+            borderRadius: '3px',
+            border: isOutMode ? '1px solid #ffe8cc' : '1px solid #d0e7ff'
+          }}>
+            {isOutMode ? 'Out' : 'In'}
+          </span>
+        )}
       </div>
     );
   }
@@ -98,7 +119,6 @@ export const CustomNodeUI: React.FC<CustomNodeUIProps> = ({
         background: bgColor, border: `2px ${isStruct ? 'dotted' : 'dashed'} ${activeBorderColor}`, position: 'relative'
       }}>
 
-        {/* ★ ボタンの色とアイコンを条件で切り替え */}
         <div
           onClick={(e) => { e.stopPropagation(); onOpenPetriNet && onOpenPetriNet(node.id); }}
           style={{
