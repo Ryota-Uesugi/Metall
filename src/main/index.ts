@@ -2,13 +2,35 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { spawn, ChildProcess } from 'child_process'
+import * as dgram from 'dgram' // ★変更: TCP(net)からUDP(dgram)へ変更
 
 let engineProcess: ChildProcess | null = null;
 let outputBuffer = '';
 let commandResolver: ((value: any) => void) | null = null;
 
+// ★変更: UDPで127.0.0.1:9090のトレースを受信するサーバー
+function startTraceServer(): void {
+  const server = dgram.createSocket('udp4');
+
+  server.on('message', (msg) => {
+    const text = msg.toString();
+    // 受信したデータをすべてのウィンドウ（フロントエンド）に送信
+    BrowserWindow.getAllWindows().forEach(win => {
+      win.webContents.send('live-trace', text);
+    });
+  });
+
+  server.on('error', (err) => {
+    console.error(`[Electron] UDP Trace Server Error:\n${err.stack}`);
+    server.close();
+  });
+
+  server.bind(9090, '127.0.0.1', () => {
+    console.log('[Electron] UDP Trace server listening on 127.0.0.1:9090');
+  });
+}
+
 function startRustEngine(): void {
-  // ※パスはご自身の環境に合わせて適宜確認してください
   const enginePath = 'D:\\Rust\\boxing\\target\\debug\\boxing.exe';
   const targetDir = 'D:\\Rust\\boxing\\scripts'; 
   
@@ -20,13 +42,6 @@ function startRustEngine(): void {
     engineProcess.stdout?.on('data', (data) => {
       const text = data.toString();
       outputBuffer += text;
-
-      // ★追加: JSONエクスポート中でなければ、随時フロントエンドに送信してストリーム表示させる
-      if (!outputBuffer.includes('===JSON_EXPORT_START===')) {
-        BrowserWindow.getAllWindows().forEach(win => {
-          win.webContents.send('engine-stream', text);
-        });
-      }
       
       if (outputBuffer.includes('===JSON_EXPORT_END===')) {
         if (commandResolver) {
@@ -100,6 +115,7 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  startTraceServer() // ★追加: UDPサーバー起動
   startRustEngine()
 
   ipcMain.handle('engine-command', async (_, command) => {
