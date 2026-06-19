@@ -18,7 +18,15 @@ function startRustEngine(): void {
     engineProcess = spawn(enginePath, [targetDir]);
 
     engineProcess.stdout?.on('data', (data) => {
-      outputBuffer += data.toString();
+      const text = data.toString();
+      outputBuffer += text;
+
+      // ★追加: JSONエクスポート中でなければ、随時フロントエンドに送信してストリーム表示させる
+      if (!outputBuffer.includes('===JSON_EXPORT_START===')) {
+        BrowserWindow.getAllWindows().forEach(win => {
+          win.webContents.send('engine-stream', text);
+        });
+      }
       
       if (outputBuffer.includes('===JSON_EXPORT_END===')) {
         if (commandResolver) {
@@ -26,14 +34,12 @@ function startRustEngine(): void {
             const startIndex = outputBuffer.indexOf('===JSON_EXPORT_START===');
             const endIndex = outputBuffer.indexOf('===JSON_EXPORT_END===');
 
-            // ★追加: JSON出力が始まる「手前」のテキストを実行ログとして抽出
             const consoleOutput = outputBuffer.substring(0, startIndex).trim();
 
             const jsonStartIndex = startIndex + '===JSON_EXPORT_START==='.length;
             const jsonStr = outputBuffer.substring(jsonStartIndex, endIndex).trim();
             
             const result = JSON.parse(jsonStr);
-            // ★追加: 実行ログをJSONオブジェクトに付与してReactに返す
             result._consoleOutput = consoleOutput;
 
             commandResolver(result);

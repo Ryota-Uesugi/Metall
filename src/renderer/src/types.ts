@@ -29,6 +29,7 @@ export interface EntityData {
 }
 
 export interface SystemState {
-  blueprint: SystemBlueprint; // ★追加: IDEで選択肢を出すための設計図
+  blueprint: SystemBlueprint;
   entities: Record<string, EntityData>;
+  traces?: string[]; // ★追加: Rustからエクスポートされる実行トレースの配列
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SystemState } from '../types';
 import { engineService } from '../services/engineService';
 
@@ -6,20 +6,36 @@ interface Props {
   state: SystemState;
   selectedId: string | null;
   onUpdate: () => void;
+  onExecuteResult: (result: string) => void;
+  width: number;
+  isCollapsed: boolean;
+  onToggle: () => void;
 }
 
-export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate }) => {
+export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, onExecuteResult, width, isCollapsed, onToggle }) => {
   const [methodName, setMethodName] = useState('');
   const [args, setArgs] = useState('');
-  const [result, setResult] = useState<string | null>(null);
+  const [speedMs, setSpeedMs] = useState(0);
+  
+  // 各コンポーネントのアコーディオン開閉状態
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
   const entity = selectedId ? state.entities[selectedId] : null;
+
+  useEffect(() => {
+    engineService.setSpeed(speedMs);
+  }, [speedMs]);
+
+  const toggleSection = (className: string) => {
+    setOpenSections(prev => ({ ...prev, [className]: prev[className] === undefined ? false : !prev[className] }));
+  };
 
   const handleCall = async (className: string) => {
     if (!selectedId || !methodName) return;
     const argList = args.split(',').map(s => s.trim()).filter(Boolean);
     const res = await engineService.callMethod(selectedId, className, methodName, argList);
-    setResult(res);
+    onExecuteResult(res);
+    setMethodName(''); setArgs('');
     onUpdate();
   };
 
@@ -32,85 +48,142 @@ export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate })
     }
   };
 
-  // ★追加: コンポーネントを削除（デタッチ）する処理
   const handleDetach = async (className: string) => {
     if (!selectedId) return;
     await engineService.detachComponent(selectedId, className);
     onUpdate();
   };
 
-  if (!entity) {
+  // 折りたたみ時の縦帯（ドロワーつまみ）
+  if (isCollapsed) {
     return (
-      <div style={{ width: '300px', backgroundColor: '#353b48', borderLeft: '1px solid #2f3640', padding: '16px', color: '#636e72' }}>
-        Select an entity in the Hierarchy.
+      <div 
+        style={{ width: '40px', backgroundColor: '#252526', display: 'flex', flexDirection: 'column', alignItems: 'center', borderLeft: '1px solid #1e1e1e', cursor: 'pointer' }}
+        onClick={onToggle}
+      >
+        <div style={{ padding: '16px 0', writingMode: 'vertical-rl', color: '#cccccc', fontSize: '0.85rem', letterSpacing: '2px', userSelect: 'none', transform: 'rotate(180deg)' }}>
+          Inspector ◀
+        </div>
       </div>
     );
   }
 
-  return (
-    <div style={{ width: '300px', backgroundColor: '#353b48', borderLeft: '1px solid #2f3640', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '8px', backgroundColor: '#2f3640', fontWeight: 'bold' }}>Inspector</div>
-      
-      <div style={{ padding: '16px', overflowY: 'auto', flex: 1 }}>
-        <h3 style={{ margin: '0 0 16px 0' }}>{entity.id}</h3>
+  if (!entity) {
+    return (
+      <div style={{ width: `${width}px`, backgroundColor: '#252526', borderLeft: '1px solid #1e1e1e', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '10px 12px', backgroundColor: '#2d2d2d', fontSize: '0.85rem', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', textTransform: 'uppercase', letterSpacing: '1px' }}>
+          <span onClick={onToggle} style={{ cursor: 'pointer', padding: '0 4px' }}>▶</span>
+          <span>Inspector</span>
+        </div>
+        <div style={{ padding: '24px', color: '#808080', textAlign: 'center', fontSize: '0.85rem' }}>
+          Select an entity to view details.
+        </div>
+      </div>
+    );
+  }
 
-        {/* コンポーネント一覧 */}
+  const inputStyle: React.CSSProperties = { width: '100%', marginBottom: '6px', padding: '6px', backgroundColor: '#3c3c3c', color: '#fff', border: '1px solid #555', borderRadius: '3px', fontSize: '0.8rem', boxSizing: 'border-box' };
+
+  return (
+    <div style={{ width: `${width}px`, backgroundColor: '#252526', borderLeft: '1px solid #1e1e1e', display: 'flex', flexDirection: 'column' }}>
+      
+      {/* ヘッダー */}
+      <div style={{ padding: '10px 12px', backgroundColor: '#2d2d2d', fontSize: '0.85rem', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textTransform: 'uppercase', letterSpacing: '1px' }}>
+        <span onClick={onToggle} style={{ cursor: 'pointer', padding: '0 4px' }}>▶</span>
+        <span>Inspector</span>
+      </div>
+
+      {/* グローバル設定 (Speed) */}
+      <div style={{ padding: '12px', backgroundColor: '#2d2d2d', borderBottom: '1px solid #333', fontSize: '0.8rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <span style={{ color: '#cccccc' }}>Execution Delay</span>
+          <span style={{ color: '#00a8ff', fontWeight: 'bold' }}>{speedMs} ms</span>
+        </div>
+        <input type="range" min="0" max="2000" step="100" value={speedMs} onChange={e => setSpeedMs(Number(e.target.value))} style={{ width: '100%', cursor: 'pointer' }} />
+      </div>
+      
+      {/* メインコンテンツ */}
+      <div style={{ padding: '12px', overflowY: 'auto', flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <span style={{ fontSize: '1.5rem' }}>{entity.isLandManager ? '📍' : '🏢'}</span>
+          <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis' }}>{entity.id}</h2>
+        </div>
+
+        {/* コンポーネントリスト */}
         {entity.components.map((comp, idx) => {
           const blueprint = state.blueprint.classes[comp.className];
+          const isOpen = openSections[comp.className] !== false; // デフォルト開
+
           return (
-            <div key={idx} style={{ backgroundColor: '#2d3436', padding: '8px', marginBottom: '8px', borderRadius: '4px' }}>
-              {/* ★変更: ヘッダー部分に Delete ボタンを配置 */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong style={{ color: '#74b9ff' }}>{comp.className}</strong>
+            <div key={idx} style={{ backgroundColor: '#2d2d2d', marginBottom: '10px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #3c3c3c' }}>
+              
+              {/* アコーディオン ヘッダー */}
+              <div 
+                style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', backgroundColor: '#383838', borderBottom: isOpen ? '1px solid #3c3c3c' : 'none' }}
+                onClick={() => toggleSection(comp.className)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.7rem', color: '#808080', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.1s' }}>▶</span>
+                  <strong style={{ color: '#4facfe', fontSize: '0.9rem' }}>{comp.className}</strong>
+                </div>
                 <button 
-                  onClick={() => handleDetach(comp.className)}
-                  style={{ backgroundColor: '#d63031', color: 'white', border: 'none', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer', fontSize: '0.75rem' }}
+                  onClick={(e) => { e.stopPropagation(); handleDetach(comp.className); }}
+                  style={{ backgroundColor: 'transparent', color: '#f44336', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: '0 4px' }}
+                  title="Remove Component"
                 >
-                  Delete
+                  ×
                 </button>
               </div>
 
-              <div style={{ fontSize: '0.8rem', marginTop: '8px', color: '#b2bec3' }}>
-                {Object.entries(comp.fields).map(([key, val]) => (
-                  <div key={key}>{key}: {JSON.stringify(val)}</div>
-                ))}
-              </div>
+              {/* アコーディオン 中身 */}
+              {isOpen && (
+                <div style={{ padding: '12px' }}>
+                  {/* Fields */}
+                  <div style={{ fontSize: '0.8rem', color: '#cccccc', marginBottom: '12px' }}>
+                    {Object.keys(comp.fields).length === 0 ? (
+                      <span style={{ color: '#808080', fontStyle: 'italic' }}>No fields available</span>
+                    ) : (
+                      Object.entries(comp.fields).map(([key, val]) => (
+                        <div key={key} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', borderBottom: '1px dotted #444', paddingBottom: '2px' }}>
+                          <span style={{ color: '#9cdcfe' }}>{key}</span>
+                          <span style={{ color: '#ce9178', wordBreak: 'break-all', maxWidth: '60%', textAlign: 'right' }}>{JSON.stringify(val)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
 
-              {/* 実行用UI */}
-              <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #636e72' }}>
-                <select style={{ width: '100%', marginBottom: '4px' }} value={methodName} onChange={e => setMethodName(e.target.value)}>
-                  <option value="">Select Method...</option>
-                  {blueprint?.methods.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
-                </select>
-                <input style={{ width: '100%', marginBottom: '4px', boxSizing: 'border-box' }} type="text" placeholder="Args (comma separated)" value={args} onChange={e => setArgs(e.target.value)} />
-                <button style={{ width: '100%' }} onClick={() => handleCall(comp.className)}>Execute</button>
-              </div>
+                  {/* Methods */}
+                  <div style={{ backgroundColor: '#1e1e1e', padding: '8px', borderRadius: '4px' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#808080', marginBottom: '6px', textTransform: 'uppercase' }}>Execute Method</div>
+                    <select style={inputStyle} value={methodName} onChange={e => setMethodName(e.target.value)} onClick={e => e.stopPropagation()}>
+                      <option value="">Select Method...</option>
+                      {blueprint?.methods.map(m => <option key={m.name} value={m.name}>{m.name}()</option>)}
+                    </select>
+                    <input style={inputStyle} type="text" placeholder="Arguments (comma separated)" value={args} onChange={e => setArgs(e.target.value)} onClick={e => e.stopPropagation()} />
+                    <button 
+                      style={{ width: '100%', padding: '6px', backgroundColor: methodName ? '#0e639c' : '#333333', color: methodName ? 'white' : '#808080', border: 'none', borderRadius: '3px', cursor: methodName ? 'pointer' : 'not-allowed', fontSize: '0.8rem', transition: '0.2s' }} 
+                      onClick={(e) => { e.stopPropagation(); handleCall(comp.className); }}
+                      disabled={!methodName}
+                    >
+                      Run
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
 
-        {/* ドロップ受付エリア */}
+        {/* ドロップゾーン */}
         <div 
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={handleDrop}
-          style={{
-            marginTop: '16px',
-            padding: '24px 8px',
-            border: '2px dashed #636e72',
-            borderRadius: '8px',
-            textAlign: 'center',
-            color: '#636e72',
-            backgroundColor: 'rgba(0,0,0,0.1)'
-          }}
+          onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.backgroundColor = 'rgba(79, 172, 254, 0.1)'; e.currentTarget.style.borderColor = '#4facfe'; }}
+          onDragLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = '#444'; }}
+          onDrop={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = '#444'; handleDrop(e); }}
+          style={{ marginTop: '16px', padding: '24px 12px', border: '1px dashed #444', borderRadius: '4px', textAlign: 'center', color: '#808080', transition: 'all 0.2s', fontSize: '0.85rem' }}
         >
-          📥 Drop .boxy file here to Attach Component
+          <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>📥</div>
+          Drag & Drop .boxy file here to Attach
         </div>
-
-        {result && (
-          <div style={{ marginTop: '16px', padding: '8px', backgroundColor: '#1e272e', borderRadius: '4px', fontSize: '0.8rem', whiteSpace: 'pre-wrap', borderLeft: '3px solid #0984e3' }}>
-            {result}
-          </div>
-        )}
       </div>
     </div>
   );

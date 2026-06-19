@@ -4,19 +4,29 @@ declare global {
   interface Window {
     engineAPI: {
       sendCommand: (command: string) => Promise<any>;
+      onEngineStream: (callback: (data: string) => void) => void;
     };
   }
 }
 
 class EngineService {
   private async execute(cmd: string): Promise<any> {
-    console.log(`[Engine] Send Command: ${cmd}`);
     if (window.engineAPI) {
       return await window.engineAPI.sendCommand(cmd);
-    } else {
-      console.error("engineAPI is not defined. Make sure preload.ts is configured.");
-      return null;
     }
+    return null;
+  }
+
+  // ★追加: ストリームをリッスンする
+  onStream(callback: (log: string) => void) {
+    if (window.engineAPI && window.engineAPI.onEngineStream) {
+      window.engineAPI.onEngineStream(callback);
+    }
+  }
+
+  // ★追加: スピード設定
+  async setSpeed(ms: number): Promise<void> {
+    await this.execute(`speed ${ms}`);
   }
 
   async createEntity(name: string, isLand: boolean): Promise<void> {
@@ -28,7 +38,6 @@ class EngineService {
     await this.execute(`attach ${entityName} ${className}`);
   }
 
-  // ★追加: デタッチコマンドを送信
   async detachComponent(entityName: string, className: string): Promise<void> {
     await this.execute(`detach ${entityName} ${className}`);
   }
