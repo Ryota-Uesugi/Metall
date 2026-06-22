@@ -1,0 +1,30 @@
+class Store {
+    // どんな名前の商品(Stock)でも動的に品揃えを追加できる
+    public fn initStock(stockName: string, initialAmount: int) -> int {
+        this.createEntity(stockName);
+        child.attachComponent(stockName, "Stock");
+        this.getChild(stockName, "Stock").setAmount(initialAmount);
+        return initialAmount;
+    }
+
+    // 店舗での販売処理
+    public fn sell(stockName: string, amount: int) -> int {
+        current = this.getChild(stockName, "Stock").getAmount();
+        if (amount <= current) {
+            this.getChild(stockName, "Stock").setAmount(current - amount);
+            return amount;
+        }
+        return 0;
+    }
+
+    // 本部からの在庫確認用窓口
+    public fn getStockAmount(stockName: string) -> int {
+        return this.getChild(stockName, "Stock").getAmount();
+    }
+
+    // 本部からの在庫調整用窓口
+    public fn setStockAmount(stockName: string, amount: int) -> int {
+        this.getChild(stockName, "Stock").setAmount(amount);
+        return amount;
+    }
+}

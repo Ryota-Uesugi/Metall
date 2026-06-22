@@ -29,7 +29,19 @@
     "win": {
       "target": "portable",
       "icon": "build/icon.ico"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "scripts",
+        "to": "scripts",
+        "filter": ["**/*"]
+      }
+    ]
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",

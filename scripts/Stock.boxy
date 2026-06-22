@@ -1,0 +1,5 @@
+class Stock {
+    public int amount;
+    public fn setAmount(val: int) -> int { amount = val; return amount; }
+    public fn getAmount() -> int { return amount; }
+}

@@ -1,0 +1,58 @@
+class Market {
+
+    public fn TestPlay() -> int {
+        this.setup();
+        this.simulateSales();
+        return this.balanceStockX();
+    }
+
+    // 1. 各店舗と商品の動的セットアップ
+    public fn setup() -> int {
+        // Store_A の設立と商品配置
+        this.createEntity("Store_A");
+        child.attachComponent("Store_A", "Store");
+        this.getChild("Store_A", "Store").initStock("Stock_X", 100);
+        this.getChild("Store_A", "Store").initStock("Stock_Y", 50);
+
+        // Store_B の設立と商品配置
+        this.createEntity("Store_B");
+        child.attachComponent("Store_B", "Store");
+        this.getChild("Store_B", "Store").initStock("Stock_X", 60);
+        this.getChild("Store_B", "Store").initStock("Stock_Y", 80);
+
+        // Store_C の設立と商品配置
+        this.createEntity("Store_C");
+        child.attachComponent("Store_C", "Store");
+        this.getChild("Store_C", "Store").initStock("Stock_X", 20);
+        this.getChild("Store_C", "Store").initStock("Stock_Y", 10);
+        
+        return 1;
+    }
+
+    // 2. 本部から各店舗へ販売イベントを発生させる
+    public fn simulateSales() -> int {
+        this.getChild("Store_A", "Store").sell("Stock_X", 40); // X残り: 60
+        this.getChild("Store_B", "Store").sell("Stock_X", 10); // X残り: 50
+        this.getChild("Store_C", "Store").sell("Stock_X", 10); // X残り: 10
+        return 1;
+    }
+
+    // 3. 商品Xの在庫を全店舗で平均化する（本部の本来の役割！）
+    public fn balanceStockX() -> int {
+        // ① 各店舗の在庫状況を吸い上げる
+        amountA = this.getChild("Store_A", "Store").getStockAmount("Stock_X");
+        amountB = this.getChild("Store_B", "Store").getStockAmount("Stock_X");
+        amountC = this.getChild("Store_C", "Store").getStockAmount("Stock_X");
+
+        // ② 本部で合計と平均を計算する
+        total = amountA + amountB + amountC;
+        avg = total / 3;
+
+        // ③ 各店舗に新しい適正在庫を指示（補充・回収）する
+        this.getChild("Store_A", "Store").setStockAmount("Stock_X", avg);
+        this.getChild("Store_B", "Store").setStockAmount("Stock_X", avg);
+        this.getChild("Store_C", "Store").setStockAmount("Stock_X", avg);
+
+        return avg; // 平均値を返す
+    }
+}

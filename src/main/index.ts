@@ -8,8 +8,19 @@ let engineProcess: ChildProcess | null = null
 let outputBuffer = ''
 let commandResolver: ((value: any) => void) | null = null
 
-const enginePath = 'D:\\Rust\\boxing\\target\\debug\\boxing.exe'
-let currentScriptsDir = 'D:\\Rust\\boxing\\scripts'
+// パッケージ化されているかどうかを判定
+const isPackaged = app.isPackaged;
+const engineExecutable = process.platform === 'win32' ? 'boxing.exe' : 'boxing';
+
+// ★開発中は元のローカルパスを直接叩き、パッケージ化後は同梱ファイルを見る
+const enginePath = isPackaged
+  ? join(process.resourcesPath, 'bin', engineExecutable)
+  : 'D:\\Rust\\boxing\\target\\debug\\boxing.exe';
+
+// スクリプトフォルダも同様
+let currentScriptsDir = isPackaged
+  ? join(process.resourcesPath, 'scripts')
+  : 'D:\\Rust\\boxing\\scripts';
 
 function startTraceServer(): void {
   const server = dgram.createSocket('udp4')
