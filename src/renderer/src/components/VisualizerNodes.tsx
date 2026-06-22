@@ -5,34 +5,41 @@ import { Box, Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { EntityData } from '../types';
 
-export const EntityNode3D: React.FC<{ entity: EntityData; node: { globalPos: THREE.Vector3, scale: number, level: number, color: string } }> = ({ entity, node }) => {
+export const EntityNode3D: React.FC<{ entity: EntityData; node: { globalPos: THREE.Vector3, landSize: number, level: number, color: string } }> = ({ entity, node }) => {
+  // 親ビルを土地の奥（後方）に配置
+  const buildingZ = -node.landSize / 2 + 3.0;
+
   return (
     <group position={[node.globalPos.x, node.globalPos.y, node.globalPos.z]}>
-      <Box args={[14 * node.scale, 0.2 * node.scale, 14 * node.scale]} position={[0, -0.1 * node.scale, 0]}>
+      {/* 土地 */}
+      <Box args={[node.landSize, 0.2, node.landSize]} position={[0, -0.1, 0]}>
         <meshStandardMaterial color={node.color} roughness={0.6} />
       </Box>
-      <lineSegments position={[0, -0.1 * node.scale, 0]}>
-        <edgesGeometry args={[new THREE.BoxGeometry(14 * node.scale, 0.2 * node.scale, 14 * node.scale)]} />
+      <lineSegments position={[0, -0.1, 0]}>
+        <edgesGeometry args={[new THREE.BoxGeometry(node.landSize, 0.2, node.landSize)]} />
         <lineBasicMaterial color="#ffffff" transparent opacity={0.2} />
       </lineSegments>
 
-      <Box args={[3 * node.scale, 1.5 * node.scale, 3 * node.scale]} position={[0, 0.75 * node.scale, 0]}>
+      {/* メインビル（奥に配置） */}
+      <Box args={[3, 1.5, 3]} position={[0, 0.75, buildingZ]}>
         <meshStandardMaterial color="#2c3e50" roughness={0.4} />
       </Box>
 
-      <Html transform position={[0, 0.75 * node.scale, 1.55 * node.scale]} style={{ color: 'white', fontWeight: 'bold', fontSize: '18px', pointerEvents: 'none', textShadow: '1px 1px 2px black', whiteSpace: 'nowrap' }}>
+      {/* エンティティ名ラベル */}
+      <Html transform position={[0, 0.75, buildingZ + 1.55]} style={{ color: 'white', fontWeight: 'bold', fontSize: '18px', pointerEvents: 'none', textShadow: '1px 1px 2px black', whiteSpace: 'nowrap' }}>
         {entity.id}
       </Html>
 
+      {/* コンポーネント（ビルの上に積み上げ） */}
       {entity.components?.map((comp, idx) => {
-        const compHeight = 1.0 * node.scale;
-        const compY = 1.5 * node.scale + (idx * 1.2 * node.scale) + (0.5 * compHeight);
+        const compHeight = 1.0;
+        const compY = 1.5 + (idx * 1.2) + (0.5 * compHeight);
         return (
-          <group key={comp.className} position={[0, compY, 0]}>
-            <Box args={[2.6 * node.scale, compHeight, 2.6 * node.scale]}>
+          <group key={comp.className} position={[0, compY, buildingZ]}>
+            <Box args={[2.6, compHeight, 2.6]}>
               <meshStandardMaterial color="#4a90e2" roughness={0.2} metalness={0.5} />
             </Box>
-            <Html transform position={[0, 0, 1.35 * node.scale]} style={{ color: 'white', fontWeight: 'bold', fontSize: '12px', pointerEvents: 'none', textShadow: '1px 1px 2px black' }}>
+            <Html transform position={[0, 0, 1.35]} style={{ color: 'white', fontWeight: 'bold', fontSize: '12px', pointerEvents: 'none', textShadow: '1px 1px 2px black' }}>
               {comp.className}
             </Html>
           </group>
