@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SystemState } from '../types';
+import { SystemState } from '../types/types';
 import { engineService } from '../services/engineService';
 
 interface ControlPanelProps {
@@ -10,10 +10,10 @@ interface ControlPanelProps {
 export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) => {
   const [newEntityName, setNewEntityName] = useState('');
   const [createParent, setCreateParent] = useState(''); // ★変更: isLandから親選択へ
-  
+
   const [attachEntity, setAttachEntity] = useState('');
   const [attachClass, setAttachClass] = useState('');
-  
+
   const [callEntity, setCallEntity] = useState('');
   const [callComponent, setCallComponent] = useState('');
   const [methodName, setMethodName] = useState('');
@@ -48,8 +48,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) =
   const panelStyle: React.CSSProperties = { padding: '16px', borderBottom: '1px solid #dcdde1' };
   const inputStyle: React.CSSProperties = { width: '100%', marginBottom: '8px', padding: '6px', boxSizing: 'border-box' };
 
-  const attachedComponents = callEntity && state.entities[callEntity] 
-    ? state.entities[callEntity].components.map(c => c.className) 
+  const attachedComponents = callEntity && state.entities[callEntity]
+    ? state.entities[callEntity].components.map(c => c.className)
     : [];
 
   const availableMethods = callComponent && state.blueprint.classes[callComponent]
@@ -78,7 +78,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) =
           <option value="">Select Entity...</option>
           {entityNames.map(name => <option key={name} value={name}>{name}</option>)}
         </select>
-        
+
         <select style={inputStyle} value={attachClass} onChange={e => setAttachClass(e.target.value)}>
           <option value="">Select Class...</option>
           {availableClasses.map(cls => <option key={cls} value={cls}>{cls}</option>)}
@@ -104,12 +104,12 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) =
         </select>
 
         <input style={inputStyle} type="text" placeholder="Args (comma separated)" value={args} onChange={e => setArgs(e.target.value)} disabled={!methodName} />
-        
+
         <button style={inputStyle} onClick={handleCall} disabled={!methodName}>Execute</button>
-        
+
         {result && (
           <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#dff9fb', borderRadius: '4px', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>
-            <strong>Result:</strong><br/>{result}
+            <strong>Result:</strong><br />{result}
           </div>
         )}
       </div>

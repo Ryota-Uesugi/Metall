@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Grid } from '@react-three/drei';
-import { SystemState, EntityData } from '../types';
+import { SystemState, EntityData } from '../types/types';
 import { LayoutManager } from './LayoutManager';
 import { EntityNode3D, InternalFlash, ExternalFlow } from './VisualizerNodes';
 
@@ -10,20 +10,20 @@ const layoutManager = new LayoutManager();
 
 type FlowActivity =
   | {
-      id: number;
-      type: 'internal';
-      label: string;
-      entityId: string;
-      color: string;
-    }
+    id: number;
+    type: 'internal';
+    label: string;
+    entityId: string;
+    color: string;
+  }
   | {
-      id: number;
-      type: 'external';
-      label: string;
-      sourceEntityId: string;
-      targetEntityId: string;
-      color: string;
-    };
+    id: number;
+    type: 'external';
+    label: string;
+    sourceEntityId: string;
+    targetEntityId: string;
+    color: string;
+  };
 
 interface Props {
   state: SystemState;

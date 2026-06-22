@@ -1,6 +1,6 @@
 // src/components/InspectorPanel.tsx
 import React, { useState } from 'react';
-import { SystemState } from '../types';
+import { SystemState } from '../types/types';
 import { engineService } from '../services/engineService';
 
 interface Props {
@@ -28,23 +28,23 @@ export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, w
     await engineService.callMethod(selectedId, className, methodName, argList);
   };
 
-  const handleDrop = async (e: React.DragEvent) => { 
-    e.preventDefault(); 
-    const componentName = e.dataTransfer.getData('boxy-component'); 
-    if (componentName && selectedId) { 
-      await engineService.attachComponent(selectedId, componentName); 
-      onUpdate(); 
-    } 
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    const componentName = e.dataTransfer.getData('boxy-component');
+    if (componentName && selectedId) {
+      await engineService.attachComponent(selectedId, componentName);
+      onUpdate();
+    }
   };
-  
-  const handleDetach = async (className: string) => { 
-    if (!selectedId) return; 
-    await engineService.detachComponent(selectedId, className); 
-    onUpdate(); 
+
+  const handleDetach = async (className: string) => {
+    if (!selectedId) return;
+    await engineService.detachComponent(selectedId, className);
+    onUpdate();
   };
-  
-  const toggleSection = (className: string) => { 
-    setOpenSections(prev => ({ ...prev, [className]: !prev[className] })); 
+
+  const toggleSection = (className: string) => {
+    setOpenSections(prev => ({ ...prev, [className]: !prev[className] }));
   };
 
   const handleFieldUpdate = async (className: string, fieldName: string, value: string) => {
@@ -62,13 +62,13 @@ export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, w
   return (
     <div style={{ width: `${width}px`, backgroundColor: '#252526', borderLeft: '1px solid #1e1e1e', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '10px 12px', backgroundColor: '#2d2d2d', fontSize: '0.85rem', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textTransform: 'uppercase', letterSpacing: '1px' }}><span onClick={onToggle} style={{ cursor: 'pointer', padding: '0 4px' }}>▶</span><span>Inspector</span></div>
-      
+
       <div style={{ padding: '12px', overflowY: 'auto', flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
           <span style={{ fontSize: '1.5rem' }}>{entity.parentId ? '🏢' : '🌍'}</span>
           <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis' }}>{entity.id}</h2>
         </div>
-        
+
         {entity.parentId && (
           <div style={{ fontSize: '0.8rem', color: '#808080', marginBottom: '16px', marginLeft: '32px' }}>
             ↳ Child of <strong style={{ color: '#4facfe' }}>{entity.parentId}</strong>
@@ -100,7 +100,7 @@ export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, w
                           {isReadOnly ? (
                             <span style={{ color: '#808080', textAlign: 'right', fontSize: '0.75rem' }}>{displayVal}</span>
                           ) : (
-                            <input 
+                            <input
                               type="text"
                               defaultValue={displayVal}
                               onBlur={(e) => handleFieldUpdate(comp.className, key, e.target.value)}
@@ -120,9 +120,9 @@ export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, w
                       {blueprint?.methods.map(m => <option key={m.name} value={m.name}>{m.name}()</option>)}
                     </select>
                     <input style={inputStyle} type="text" placeholder="Arguments (comma separated)" value={args} onChange={e => setArgs(e.target.value)} disabled={isExecuting} />
-                    
-                    <button 
-                      style={{ width: '100%', padding: '6px', backgroundColor: isExecuting ? '#e67e22' : (methodName ? '#0e639c' : '#333'), color: methodName || isExecuting ? 'white' : '#808080', border: 'none', borderRadius: '3px', cursor: methodName && !isExecuting ? 'pointer' : 'not-allowed', fontSize: '0.8rem', transition: '0.2s' }} 
+
+                    <button
+                      style={{ width: '100%', padding: '6px', backgroundColor: isExecuting ? '#e67e22' : (methodName ? '#0e639c' : '#333'), color: methodName || isExecuting ? 'white' : '#808080', border: 'none', borderRadius: '3px', cursor: methodName && !isExecuting ? 'pointer' : 'not-allowed', fontSize: '0.8rem', transition: '0.2s' }}
                       onClick={(e) => { e.stopPropagation(); handleCall(comp.className); }}
                       disabled={!methodName || isExecuting}
                     >
@@ -135,10 +135,10 @@ export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, w
           );
         })}
 
-        <div 
-          onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.backgroundColor = 'rgba(79, 172, 254, 0.1)'; e.currentTarget.style.borderColor = '#4facfe'; }} 
-          onDragLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = '#444'; }} 
-          onDrop={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = '#444'; handleDrop(e); }} 
+        <div
+          onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.backgroundColor = 'rgba(79, 172, 254, 0.1)'; e.currentTarget.style.borderColor = '#4facfe'; }}
+          onDragLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = '#444'; }}
+          onDrop={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = '#444'; handleDrop(e); }}
           style={{ marginTop: '16px', padding: '24px 12px', border: '1px dashed #444', borderRadius: '4px', textAlign: 'center', color: '#808080', transition: 'all 0.2s', fontSize: '0.85rem' }}
         >
           <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>📥</div>

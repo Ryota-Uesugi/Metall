@@ -1,6 +1,6 @@
 // src/components/BottomPanel.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { SystemState } from '../types';
+import { SystemState } from '../types/types';
 
 interface Props {
   state: SystemState;
@@ -38,8 +38,8 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
       let color = '#cccccc';
       let icon = '🔹';
       let bgColor = 'transparent';
-      
-      switch(t.action) {
+
+      switch (t.action) {
         case 'CALL': color = '#4facfe'; icon = '▶️'; break;
         case 'RETURN': color = '#2ecc71'; icon = '✅'; break;
         case 'THROW': color = '#ff7675'; icon = '❌'; bgColor = 'rgba(255, 118, 117, 0.1)'; break;
@@ -62,7 +62,7 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
       }
 
       return `<div style="background-color:${bgColor}; padding: 2px 4px; border-radius: 2px;"><span style="color:${color}">${icon} [${t.action}] <b>${t.target}</b> ${t.value ? `=> <span style="color:#ce9178">${t.value}</span>` : ''}</span></div>`;
-    } catch(e) {
+    } catch (e) {
       return `<div>${traceStr}</div>`;
     }
   };
@@ -75,7 +75,7 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
         <div style={{ display: 'flex' }}><div style={tabStyle('files')} onClick={() => setActiveTab('files')}>📁 Project</div><div style={tabStyle('console')} onClick={() => setActiveTab('console')}>🖥️ Console</div></div>
         <div style={{ padding: '8px 16px', cursor: 'pointer', color: '#808080', fontSize: '0.8rem' }} onClick={onToggle}>▼ Collapse</div>
       </div>
-      
+
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', backgroundColor: '#1e1e1e' }}>
         {activeTab === 'files' && (
           <div style={{ display: 'flex', padding: '16px', gap: '16px', overflowX: 'auto', alignItems: 'flex-start', flex: 1 }}>

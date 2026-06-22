@@ -5,13 +5,13 @@ import { Visualizer3D } from './components/Visualizer3D';
 import { HierarchyPanel } from './components/HierarchyPanel';
 import { InspectorPanel } from './components/InspectorPanel';
 import { BottomPanel } from './components/BottomPanel';
-import { SystemState } from './types';
+import { SystemState } from './types/types';
 import { engineService } from './services/engineService';
 
 const App: React.FC = () => {
   const [state, setState] = useState<SystemState>({ blueprint: { classes: {} }, entities: {} });
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
-  
+
   const [liveTraces, setLiveTraces] = useState<string[]>([]);
   const [executingMethod, setExecutingMethod] = useState<string | null>(null);
 
@@ -58,7 +58,7 @@ const App: React.FC = () => {
           setExecutingMethod(null);
           fetchState();
         }
-      } catch (e) {}
+      } catch (e) { }
     }
   }, [liveTraces, executingMethod]);
 
@@ -80,7 +80,7 @@ const App: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', margin: 0, overflow: 'hidden', backgroundColor: '#1e1e1e', color: '#cccccc', fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif' }}>
-      
+
       {/* 新設：グローバルツールバー (Unity風) */}
       <Toolbar onUpdate={fetchState} isExecuting={executingMethod !== null} />
 
@@ -94,14 +94,14 @@ const App: React.FC = () => {
 
         {!rightCollapsed && <div style={resizerStyle('horizontal')} onMouseDown={createDragHandler(rightWidth, setRightWidth, 'horizontal', true)} />}
 
-        <InspectorPanel 
-          state={state} selectedId={selectedEntityId} onUpdate={fetchState} 
+        <InspectorPanel
+          state={state} selectedId={selectedEntityId} onUpdate={fetchState}
           width={rightWidth} isCollapsed={rightCollapsed} onToggle={() => setRightCollapsed(!rightCollapsed)}
           isExecuting={executingMethod !== null}
           onExecuteStart={(method) => { setExecutingMethod(method); setLiveTraces([]); setBottomCollapsed(false); }}
         />
       </div>
-      
+
       {!bottomCollapsed && <div style={resizerStyle('vertical')} onMouseDown={createDragHandler(bottomHeight, setBottomHeight, 'vertical', true)} />}
       <BottomPanel state={state} liveTraces={liveTraces} isExecuting={executingMethod !== null} height={bottomHeight} isCollapsed={bottomCollapsed} onToggle={() => setBottomCollapsed(!bottomCollapsed)} />
     </div>

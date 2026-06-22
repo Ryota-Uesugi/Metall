@@ -1,6 +1,6 @@
 // src/components/LayoutManager.ts
 import * as THREE from 'three';
-import { EntityData } from '../types';
+import { EntityData } from '../types/types';
 
 export class LayoutManager {
   public nodes = new Map<
