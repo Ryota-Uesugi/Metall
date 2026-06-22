@@ -1,11 +1,11 @@
+// src/components/BottomPanel.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { SystemState } from '../types';
 
 interface Props {
   state: SystemState;
-  executionResult: string | null;
   liveTraces: string[];
-  isExecuting: boolean; // ★追加
+  isExecuting: boolean;
   height: number;
   isCollapsed: boolean;
   onToggle: () => void;
@@ -15,12 +15,16 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
   const [activeTab, setActiveTab] = useState<'files' | 'console'>('files');
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
+  // ★修正: 「メソッド実行中（isExecuting）」のみ強制でコンソールタブを開く
+  // ユーザーが手動でコンソールを見ている時は、新しいログが来たら自動スクロールする
   useEffect(() => {
-    if (liveTraces.length > 0 || isExecuting) {
+    if (isExecuting) {
       setActiveTab('console');
+    }
+    if (activeTab === 'console' || isExecuting) {
       consoleEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [liveTraces.length, isExecuting]);
+  }, [liveTraces.length, isExecuting, activeTab]);
 
   const classes = Object.keys(state.blueprint.classes || {});
 
@@ -28,20 +32,38 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
     padding: '8px 20px', cursor: 'pointer', backgroundColor: activeTab === tab ? '#1e1e1e' : 'transparent', color: activeTab === tab ? '#ffffff' : '#808080', borderTop: activeTab === tab ? '1px solid #00a8ff' : '1px solid transparent', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '6px'
   });
 
-  // ★追加: JSON文字列を見やすいHTMLに変換する関数
   const formatTrace = (traceStr: string) => {
     try {
       const t = JSON.parse(traceStr);
       let color = '#cccccc';
       let icon = '🔹';
+      let bgColor = 'transparent';
       
-      if (t.action === 'CALL') { color = '#4facfe'; icon = '▶️'; }
-      else if (t.action === 'RETURN') { color = '#2ecc71'; icon = '✅'; }
-      else if (t.action.includes('SET_')) { color = '#f39c12'; icon = '📝'; }
+      switch(t.action) {
+        case 'CALL': color = '#4facfe'; icon = '▶️'; break;
+        case 'RETURN': color = '#2ecc71'; icon = '✅'; break;
+        case 'THROW': color = '#ff7675'; icon = '❌'; bgColor = 'rgba(255, 118, 117, 0.1)'; break;
+        case 'NEW': color = '#fdcb6e'; icon = '✨'; break;
+        case 'ATTACH_COMPONENT':
+        case 'DETACH_COMPONENT': color = '#e84393'; icon = '🧩'; break;
+        case 'ENTRY': color = '#00cec9'; icon = '🚪'; break;
+        case 'GET_COMPONENT': color = '#74b9ff'; icon = '🔍'; break;
+        case 'GET_PARENT':
+        case 'GET_CHILD': color = '#e1b12c'; icon = '🤝'; break;
+        case 'SET_LOCAL':
+        case 'SET_FIELD':
+        case 'SET_PROP': color = '#f39c12'; icon = '📝'; break;
+        case 'READ_LOCAL':
+        case 'READ_FIELD':
+        case 'READ_PROP': color = '#a29bfe'; icon = '📖'; break;
+        case 'BIND_ARG': color = '#55efc4'; icon = '🔗'; break;
+        case 'IF_COND': color = '#ffeaa7'; icon = '🔀'; break;
+        default: break;
+      }
 
-      return `<span style="color:${color}">${icon} [${t.action}] <b>${t.target}</b> => <span style="color:#ce9178">${t.value}</span></span>`;
+      return `<div style="background-color:${bgColor}; padding: 2px 4px; border-radius: 2px;"><span style="color:${color}">${icon} [${t.action}] <b>${t.target}</b> ${t.value ? `=> <span style="color:#ce9178">${t.value}</span>` : ''}</span></div>`;
     } catch(e) {
-      return traceStr; // JSONでなければそのまま表示
+      return `<div>${traceStr}</div>`;
     }
   };
 
@@ -55,7 +77,6 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
       </div>
       
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', backgroundColor: '#1e1e1e' }}>
-        
         {activeTab === 'files' && (
           <div style={{ display: 'flex', padding: '16px', gap: '16px', overflowX: 'auto', alignItems: 'flex-start', flex: 1 }}>
             {classes.map(className => (
@@ -71,15 +92,13 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', color: '#cccccc', fontFamily: '"Consolas", "Courier New", monospace', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
             {liveTraces.length > 0 ? (
               liveTraces.map((trace, idx) => (
-                <div key={idx} style={{ marginBottom: '4px', borderBottom: '1px solid #333', paddingBottom: '4px' }} dangerouslySetInnerHTML={{ __html: formatTrace(trace) }} />
+                <div key={idx} dangerouslySetInnerHTML={{ __html: formatTrace(trace) }} />
               ))
             ) : (
               <span style={{ color: '#808080', fontStyle: 'italic' }}>
                 {isExecuting ? '⏳ Executing...' : 'Waiting for connection on 127.0.0.1:9090...'}
               </span>
             )}
-            
-            {/* 実行完了メッセージ */}
             {liveTraces.length > 0 && !isExecuting && (
               <div style={{ marginTop: '8px', color: '#f39c12', fontWeight: 'bold' }}>🏁 Execution Finished. Data updated.</div>
             )}

@@ -1,4 +1,6 @@
+// src/App.tsx
 import React, { useState, useEffect } from 'react';
+import { Toolbar } from './components/Toolbar';
 import { Visualizer3D } from './components/Visualizer3D';
 import { HierarchyPanel } from './components/HierarchyPanel';
 import { InspectorPanel } from './components/InspectorPanel';
@@ -9,11 +11,8 @@ import { engineService } from './services/engineService';
 const App: React.FC = () => {
   const [state, setState] = useState<SystemState>({ blueprint: { classes: {} }, entities: {} });
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
-  const [executionResult] = useState<string | null>(null);
   
   const [liveTraces, setLiveTraces] = useState<string[]>([]);
-  
-  // ★追加: 現在実行中のメソッド名を追跡し、実行中かどうかの判定に使う
   const [executingMethod, setExecutingMethod] = useState<string | null>(null);
 
   const [leftWidth, setLeftWidth] = useState(250);
@@ -36,11 +35,9 @@ const App: React.FC = () => {
     if (api && api.onLiveTrace) {
       api.onLiveTrace((traceChunk: string) => {
         const traces = traceChunk.split('\n').filter(s => s.trim() !== '');
-        
         setLiveTraces(prev => {
           const next = [...prev];
           traces.forEach(t => {
-            // ★重複ログ対策: 直前と全く同じログなら追加しない
             if (next.length === 0 || next[next.length - 1] !== t) {
               next.push(t);
             }
@@ -51,18 +48,17 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // ★追加: トレースを監視し、実行の「完了」を検知する
   useEffect(() => {
     if (executingMethod && liveTraces.length > 0) {
       const lastTraceStr = liveTraces[liveTraces.length - 1];
       try {
         const lastTrace = JSON.parse(lastTraceStr);
-        // 実行したメソッドの RETURN が来たら終了とみなす
-        if (lastTrace.action === "RETURN" && lastTrace.target === executingMethod) {
+        // エラー(THROW)またはRETURNで実行終了とみなす
+        if ((lastTrace.action === "RETURN" || lastTrace.action === "THROW") && lastTrace.target.includes(executingMethod)) {
           setExecutingMethod(null);
-          fetchState(); // 実行が終わったので最新の状態をRustから取得
+          fetchState();
         }
-      } catch (e) { /* ignore parse error */ }
+      } catch (e) {}
     }
   }, [liveTraces, executingMethod]);
 
@@ -84,30 +80,30 @@ const App: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', margin: 0, overflow: 'hidden', backgroundColor: '#1e1e1e', color: '#cccccc', fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif' }}>
+      
+      {/* 新設：グローバルツールバー (Unity風) */}
+      <Toolbar onUpdate={fetchState} isExecuting={executingMethod !== null} />
+
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <HierarchyPanel state={state} selectedId={selectedEntityId} onSelect={setSelectedEntityId} onUpdate={fetchState} width={leftWidth} isCollapsed={leftCollapsed} onToggle={() => setLeftCollapsed(!leftCollapsed)} />
-        {!leftCollapsed && <div style={resizerStyle('horizontal')} onMouseDown={createDragHandler(leftWidth, setLeftWidth, 'horizontal', false)} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#0984e3'} onMouseLeave={e => e.currentTarget.style.backgroundColor = '#1e272e'} />}
+        {!leftCollapsed && <div style={resizerStyle('horizontal')} onMouseDown={createDragHandler(leftWidth, setLeftWidth, 'horizontal', false)} />}
 
         <div style={{ flex: 1, position: 'relative', backgroundColor: '#141414' }}>
           <Visualizer3D state={state} activeEntityId={selectedEntityId} liveTraces={liveTraces} />
         </div>
 
-        {!rightCollapsed && <div style={resizerStyle('horizontal')} onMouseDown={createDragHandler(rightWidth, setRightWidth, 'horizontal', true)} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#0984e3'} onMouseLeave={e => e.currentTarget.style.backgroundColor = '#1e272e'} />}
+        {!rightCollapsed && <div style={resizerStyle('horizontal')} onMouseDown={createDragHandler(rightWidth, setRightWidth, 'horizontal', true)} />}
 
         <InspectorPanel 
           state={state} selectedId={selectedEntityId} onUpdate={fetchState} 
           width={rightWidth} isCollapsed={rightCollapsed} onToggle={() => setRightCollapsed(!rightCollapsed)}
-          // ★追加: 実行状態の管理を渡す
           isExecuting={executingMethod !== null}
-          onExecuteStart={(method) => { 
-            setExecutingMethod(method); 
-            setLiveTraces([]); 
-            setBottomCollapsed(false); 
-          }}
+          onExecuteStart={(method) => { setExecutingMethod(method); setLiveTraces([]); setBottomCollapsed(false); }}
         />
       </div>
-      {!bottomCollapsed && <div style={resizerStyle('vertical')} onMouseDown={createDragHandler(bottomHeight, setBottomHeight, 'vertical', true)} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#0984e3'} onMouseLeave={e => e.currentTarget.style.backgroundColor = '#1e272e'} />}
-      <BottomPanel state={state} executionResult={executionResult} liveTraces={liveTraces} isExecuting={executingMethod !== null} height={bottomHeight} isCollapsed={bottomCollapsed} onToggle={() => setBottomCollapsed(!bottomCollapsed)} />
+      
+      {!bottomCollapsed && <div style={resizerStyle('vertical')} onMouseDown={createDragHandler(bottomHeight, setBottomHeight, 'vertical', true)} />}
+      <BottomPanel state={state} liveTraces={liveTraces} isExecuting={executingMethod !== null} height={bottomHeight} isCollapsed={bottomCollapsed} onToggle={() => setBottomCollapsed(!bottomCollapsed)} />
     </div>
   );
 };

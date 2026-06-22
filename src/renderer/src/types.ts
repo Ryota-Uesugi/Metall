@@ -23,9 +23,12 @@ export interface ComponentData {
 
 export interface EntityData {
   id: string;
-  isLandManager: boolean;
-  components: ComponentData[];
-  subBuildings: string[];
+  parentId: string | null; // ★追加
+  children: string[];      // ★追加
+  
+  components: any[]; 
+  isLandManager?: boolean;
+  subBuildings?: string[];
 }
 
 export interface SystemState {

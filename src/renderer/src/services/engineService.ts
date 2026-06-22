@@ -1,3 +1,4 @@
+// src/services/engineService.ts
 import { SystemState } from '../types';
 
 declare global {
@@ -17,21 +18,44 @@ class EngineService {
     return null;
   }
 
-  // ★追加: ストリームをリッスンする
   onStream(callback: (log: string) => void) {
     if (window.engineAPI && window.engineAPI.onEngineStream) {
       window.engineAPI.onEngineStream(callback);
     }
   }
 
-  // ★追加: スピード設定
   async setSpeed(ms: number): Promise<void> {
     await this.execute(`speed ${ms}`);
   }
 
-  async createEntity(name: string, isLand: boolean): Promise<void> {
-    const finalName = isLand && !name.includes("Land") ? `${name}_Land` : name;
-    await this.execute(`create ${finalName}`);
+  async setTraceMode(mode: 'off' | 'basic' | 'verbose'): Promise<void> {
+    await this.execute(`trace ${mode}`);
+  }
+
+  async reload(keepEntities: boolean = false): Promise<void> {
+    await this.execute(keepEntities ? `reload --keep-entities` : `reload`);
+  }
+
+  async clearEntities(): Promise<void> {
+    await this.execute(`clear`);
+  }
+
+  async destroyEntity(entityName: string): Promise<void> {
+    await this.execute(`destroy ${entityName}`);
+  }
+
+  async setFieldValue(entityName: string, componentName: string, fieldName: string, value: string): Promise<void> {
+    if (!value) return;
+    await this.execute(`set ${entityName} ${componentName} ${fieldName} ${value}`);
+  }
+
+  // ★ 変更: 親を指定してEntityを作成するコマンドに対応
+  async createEntity(name: string, parentName: string | null = null): Promise<void> {
+    if (parentName) {
+      await this.execute(`create ${name} ${parentName}`);
+    } else {
+      await this.execute(`create ${name}`);
+    }
   }
 
   async attachComponent(entityName: string, className: string): Promise<void> {

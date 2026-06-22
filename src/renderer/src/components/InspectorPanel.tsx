@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// src/components/InspectorPanel.tsx
+import React, { useState } from 'react';
 import { SystemState } from '../types';
 import { engineService } from '../services/engineService';
 
@@ -9,37 +10,48 @@ interface Props {
   width: number;
   isCollapsed: boolean;
   onToggle: () => void;
-  isExecuting: boolean; // ★追加
-  onExecuteStart: (methodName: string) => void; // ★追加
+  isExecuting: boolean;
+  onExecuteStart: (methodName: string) => void;
 }
 
 export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, width, isCollapsed, onToggle, isExecuting, onExecuteStart }) => {
   const [methodName, setMethodName] = useState('');
   const [args, setArgs] = useState('');
-  const [speedMs, setSpeedMs] = useState(0);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
   const entity = selectedId ? state.entities[selectedId] : null;
 
-  useEffect(() => {
-    engineService.setSpeed(speedMs);
-  }, [speedMs]);
-
   const handleCall = async (className: string) => {
     if (!selectedId || !methodName || isExecuting) return;
-    
-    // ★変更: 実行開始をAppに通知（これでボタンがロックされ、終了監視が始まる）
     onExecuteStart(methodName);
-    
     const argList = args.split(',').map(s => s.trim()).filter(Boolean);
     await engineService.callMethod(selectedId, className, methodName, argList);
-    // メソッドと引数のリセットは完了後に行うかそのままにするかはお好みで
   };
 
-  // ... (handleDrop, handleDetach の記述は変更なしのため省略) ...
-  const handleDrop = async (e: React.DragEvent) => { e.preventDefault(); const componentName = e.dataTransfer.getData('boxy-component'); if (componentName && selectedId) { await engineService.attachComponent(selectedId, componentName); onUpdate(); } };
-  const handleDetach = async (className: string) => { if (!selectedId) return; await engineService.detachComponent(selectedId, className); onUpdate(); };
-  const toggleSection = (className: string) => { setOpenSections(prev => ({ ...prev, [className]: prev[className] === undefined ? false : !prev[className] })); };
+  const handleDrop = async (e: React.DragEvent) => { 
+    e.preventDefault(); 
+    const componentName = e.dataTransfer.getData('boxy-component'); 
+    if (componentName && selectedId) { 
+      await engineService.attachComponent(selectedId, componentName); 
+      onUpdate(); 
+    } 
+  };
+  
+  const handleDetach = async (className: string) => { 
+    if (!selectedId) return; 
+    await engineService.detachComponent(selectedId, className); 
+    onUpdate(); 
+  };
+  
+  const toggleSection = (className: string) => { 
+    setOpenSections(prev => ({ ...prev, [className]: !prev[className] })); 
+  };
+
+  const handleFieldUpdate = async (className: string, fieldName: string, value: string) => {
+    if (!selectedId) return;
+    await engineService.setFieldValue(selectedId, className, fieldName, value);
+    onUpdate();
+  };
 
   if (isCollapsed) return (<div style={{ width: '40px', backgroundColor: '#252526', display: 'flex', flexDirection: 'column', alignItems: 'center', borderLeft: '1px solid #1e1e1e', cursor: 'pointer' }} onClick={onToggle}><div style={{ padding: '16px 0', writingMode: 'vertical-rl', color: '#cccccc', fontSize: '0.85rem', letterSpacing: '2px', userSelect: 'none', transform: 'rotate(180deg)' }}>Inspector ◀</div></div>);
 
@@ -50,18 +62,23 @@ export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, w
   return (
     <div style={{ width: `${width}px`, backgroundColor: '#252526', borderLeft: '1px solid #1e1e1e', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '10px 12px', backgroundColor: '#2d2d2d', fontSize: '0.85rem', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textTransform: 'uppercase', letterSpacing: '1px' }}><span onClick={onToggle} style={{ cursor: 'pointer', padding: '0 4px' }}>▶</span><span>Inspector</span></div>
-
-      <div style={{ padding: '12px', backgroundColor: '#2d2d2d', borderBottom: '1px solid #333', fontSize: '0.8rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ color: '#cccccc' }}>Execution Delay</span><span style={{ color: '#00a8ff', fontWeight: 'bold' }}>{speedMs} ms</span></div>
-        <input type="range" min="0" max="2000" step="100" value={speedMs} onChange={e => setSpeedMs(Number(e.target.value))} style={{ width: '100%', cursor: 'pointer' }} />
-      </div>
       
       <div style={{ padding: '12px', overflowY: 'auto', flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}><span style={{ fontSize: '1.5rem' }}>{entity.isLandManager ? '📍' : '🏢'}</span><h2 style={{ margin: 0, fontSize: '1.1rem', color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis' }}>{entity.id}</h2></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+          <span style={{ fontSize: '1.5rem' }}>{entity.parentId ? '🏢' : '🌍'}</span>
+          <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis' }}>{entity.id}</h2>
+        </div>
+        
+        {entity.parentId && (
+          <div style={{ fontSize: '0.8rem', color: '#808080', marginBottom: '16px', marginLeft: '32px' }}>
+            ↳ Child of <strong style={{ color: '#4facfe' }}>{entity.parentId}</strong>
+          </div>
+        )}
 
         {entity.components.map((comp, idx) => {
           const blueprint = state.blueprint.classes[comp.className];
-          const isOpen = openSections[comp.className] !== false;
+          // ★修正: デフォルト（undefined）を「閉じた状態」として扱う
+          const isOpen = openSections[comp.className] === true;
 
           return (
             <div key={idx} style={{ backgroundColor: '#2d2d2d', marginBottom: '10px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #3c3c3c' }}>
@@ -73,9 +90,27 @@ export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, w
               {isOpen && (
                 <div style={{ padding: '12px' }}>
                   <div style={{ fontSize: '0.8rem', color: '#cccccc', marginBottom: '12px' }}>
-                    {Object.keys(comp.fields).length === 0 ? <span style={{ color: '#808080', fontStyle: 'italic' }}>No fields available</span> : Object.entries(comp.fields).map(([key, val]) => (
-                      <div key={key} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', borderBottom: '1px dotted #444', paddingBottom: '2px' }}><span style={{ color: '#9cdcfe' }}>{key}</span><span style={{ color: '#ce9178', wordBreak: 'break-all', maxWidth: '60%', textAlign: 'right' }}>{JSON.stringify(val)}</span></div>
-                    ))}
+                    {Object.keys(comp.fields).length === 0 ? <span style={{ color: '#808080', fontStyle: 'italic' }}>No fields available</span> : Object.entries(comp.fields).map(([key, val]) => {
+                      const isReadOnly = key.startsWith('__');
+                      const displayVal = typeof val === 'object' && val !== null ? (val as any).value || JSON.stringify(val) : String(val);
+
+                      return (
+                        <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', borderBottom: '1px dotted #444', paddingBottom: '4px' }}>
+                          <span style={{ color: '#9cdcfe', width: '40%' }}>{key}</span>
+                          {isReadOnly ? (
+                            <span style={{ color: '#808080', textAlign: 'right', fontSize: '0.75rem' }}>{displayVal}</span>
+                          ) : (
+                            <input 
+                              type="text"
+                              defaultValue={displayVal}
+                              onBlur={(e) => handleFieldUpdate(comp.className, key, e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && handleFieldUpdate(comp.className, key, e.currentTarget.value)}
+                              style={{ width: '55%', backgroundColor: '#1e1e1e', color: '#ce9178', border: '1px solid #555', borderRadius: '2px', padding: '2px 4px', fontSize: '0.75rem', textAlign: 'right' }}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <div style={{ backgroundColor: '#1e1e1e', padding: '8px', borderRadius: '4px' }}>
@@ -86,7 +121,6 @@ export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, w
                     </select>
                     <input style={inputStyle} type="text" placeholder="Arguments (comma separated)" value={args} onChange={e => setArgs(e.target.value)} disabled={isExecuting} />
                     
-                    {/* ★変更: 実行中はボタンのテキストと色を変える */}
                     <button 
                       style={{ width: '100%', padding: '6px', backgroundColor: isExecuting ? '#e67e22' : (methodName ? '#0e639c' : '#333'), color: methodName || isExecuting ? 'white' : '#808080', border: 'none', borderRadius: '3px', cursor: methodName && !isExecuting ? 'pointer' : 'not-allowed', fontSize: '0.8rem', transition: '0.2s' }} 
                       onClick={(e) => { e.stopPropagation(); handleCall(comp.className); }}
@@ -101,7 +135,16 @@ export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, w
           );
         })}
 
-        <div onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.backgroundColor = 'rgba(79, 172, 254, 0.1)'; e.currentTarget.style.borderColor = '#4facfe'; }} onDragLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = '#444'; }} onDrop={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = '#444'; handleDrop(e); }} style={{ marginTop: '16px', padding: '24px 12px', border: '1px dashed #444', borderRadius: '4px', textAlign: 'center', color: '#808080', transition: 'all 0.2s', fontSize: '0.85rem' }}><div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>📥</div>Drag & Drop .boxy file here</div>
+        <div 
+          onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.backgroundColor = 'rgba(79, 172, 254, 0.1)'; e.currentTarget.style.borderColor = '#4facfe'; }} 
+          onDragLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = '#444'; }} 
+          onDrop={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = '#444'; handleDrop(e); }} 
+          style={{ marginTop: '16px', padding: '24px 12px', border: '1px dashed #444', borderRadius: '4px', textAlign: 'center', color: '#808080', transition: 'all 0.2s', fontSize: '0.85rem' }}
+        >
+          <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>📥</div>
+          Drag & Drop .boxy file here
+        </div>
+
       </div>
     </div>
   );

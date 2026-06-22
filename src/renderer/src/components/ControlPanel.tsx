@@ -9,7 +9,7 @@ interface ControlPanelProps {
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) => {
   const [newEntityName, setNewEntityName] = useState('');
-  const [isLand, setIsLand] = useState(false);
+  const [createParent, setCreateParent] = useState(''); // ★変更: isLandから親選択へ
   
   const [attachEntity, setAttachEntity] = useState('');
   const [attachClass, setAttachClass] = useState('');
@@ -25,7 +25,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) =
 
   const handleCreateEntity = async () => {
     if (!newEntityName) return;
-    await engineService.createEntity(newEntityName, isLand);
+    await engineService.createEntity(newEntityName, createParent || null);
     setNewEntityName('');
     onUpdate();
   };
@@ -48,12 +48,10 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) =
   const panelStyle: React.CSSProperties = { padding: '16px', borderBottom: '1px solid #dcdde1' };
   const inputStyle: React.CSSProperties = { width: '100%', marginBottom: '8px', padding: '6px', boxSizing: 'border-box' };
 
-  // 選択されたEntityにアタッチされているコンポーネントのリスト
   const attachedComponents = callEntity && state.entities[callEntity] 
     ? state.entities[callEntity].components.map(c => c.className) 
     : [];
 
-  // 選択されたコンポーネントが持つメソッドのリスト
   const availableMethods = callComponent && state.blueprint.classes[callComponent]
     ? state.blueprint.classes[callComponent].methods.map(m => m.name)
     : [];
@@ -64,17 +62,16 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) =
         <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Boxy IDE Panel</h2>
       </div>
 
-      {/* ① Create Entity */}
       <div style={panelStyle}>
         <h3 style={{ fontSize: '1rem' }}>① Create Entity</h3>
-        <input style={inputStyle} type="text" placeholder="Entity Name (ex: Land_A)" value={newEntityName} onChange={e => setNewEntityName(e.target.value)} />
-        <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>
-          <input type="checkbox" checked={isLand} onChange={e => setIsLand(e.target.checked)} /> 土地・管理ビルとして作成
-        </label>
+        <input style={inputStyle} type="text" placeholder="Entity Name" value={newEntityName} onChange={e => setNewEntityName(e.target.value)} />
+        <select style={inputStyle} value={createParent} onChange={e => setCreateParent(e.target.value)}>
+          <option value="">No Parent (Root)</option>
+          {entityNames.map(name => <option key={name} value={name}>{name}</option>)}
+        </select>
         <button style={inputStyle} onClick={handleCreateEntity}>Create</button>
       </div>
 
-      {/* ② Attach Component */}
       <div style={panelStyle}>
         <h3 style={{ fontSize: '1rem' }}>② Attach Component</h3>
         <select style={inputStyle} value={attachEntity} onChange={e => setAttachEntity(e.target.value)}>
@@ -82,7 +79,6 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) =
           {entityNames.map(name => <option key={name} value={name}>{name}</option>)}
         </select>
         
-        {/* 手入力からプルダウンに変更 */}
         <select style={inputStyle} value={attachClass} onChange={e => setAttachClass(e.target.value)}>
           <option value="">Select Class...</option>
           {availableClasses.map(cls => <option key={cls} value={cls}>{cls}</option>)}
@@ -90,7 +86,6 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) =
         <button style={inputStyle} onClick={handleAttach}>Attach</button>
       </div>
 
-      {/* ③ Execute */}
       <div style={panelStyle}>
         <h3 style={{ fontSize: '1rem' }}>③ Execute Method</h3>
         <select style={inputStyle} value={callEntity} onChange={e => { setCallEntity(e.target.value); setCallComponent(''); setMethodName(''); }}>
@@ -98,13 +93,11 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) =
           {entityNames.map(name => <option key={name} value={name}>{name}</option>)}
         </select>
 
-        {/* アタッチされているコンポーネントだけを選択可能にする */}
         <select style={inputStyle} value={callComponent} onChange={e => { setCallComponent(e.target.value); setMethodName(''); }} disabled={!callEntity}>
           <option value="">2. Select Component...</option>
           {attachedComponents.map(cls => <option key={cls} value={cls}>{cls}</option>)}
         </select>
 
-        {/* 選択したコンポーネントが持つメソッドだけを選択可能にする */}
         <select style={inputStyle} value={methodName} onChange={e => setMethodName(e.target.value)} disabled={!callComponent}>
           <option value="">3. Select Method...</option>
           {availableMethods.map(m => <option key={m} value={m}>{m}</option>)}
