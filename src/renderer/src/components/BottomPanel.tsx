@@ -15,8 +15,6 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
   const [activeTab, setActiveTab] = useState<'files' | 'console'>('files');
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
-  // ★修正: 「メソッド実行中（isExecuting）」のみ強制でコンソールタブを開く
-  // ユーザーが手動でコンソールを見ている時は、新しいログが来たら自動スクロールする
   useEffect(() => {
     if (isExecuting) {
       setActiveTab('console');
@@ -42,7 +40,8 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
       switch (t.action) {
         case 'CALL': color = '#4facfe'; icon = '▶️'; break;
         case 'RETURN': color = '#2ecc71'; icon = '✅'; break;
-        case 'THROW': color = '#ff7675'; icon = '❌'; bgColor = 'rgba(255, 118, 117, 0.1)'; break;
+        case 'THROW':
+        case 'ERROR': color = '#ff7675'; icon = '❌'; bgColor = 'rgba(255, 118, 117, 0.1)'; break;
         case 'NEW': color = '#fdcb6e'; icon = '✨'; break;
         case 'ATTACH_COMPONENT':
         case 'DETACH_COMPONENT': color = '#e84393'; icon = '🧩'; break;
@@ -55,9 +54,12 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
         case 'SET_PROP': color = '#f39c12'; icon = '📝'; break;
         case 'READ_LOCAL':
         case 'READ_FIELD':
-        case 'READ_PROP': color = '#a29bfe'; icon = '📖'; break;
+        case 'READ_PROP':
+        case 'READ_THIS': color = '#a29bfe'; icon = '📖'; break;
         case 'BIND_ARG': color = '#55efc4'; icon = '🔗'; break;
         case 'IF_COND': color = '#ffeaa7'; icon = '🔀'; break;
+        case 'STATE_TRANSITION': color = '#9b59b6'; icon = '🔄'; break;
+        case 'STATE_EVENT': color = '#8e44ad'; icon = '⚡'; break;
         default: break;
       }
 

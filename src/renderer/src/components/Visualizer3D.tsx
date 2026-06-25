@@ -282,7 +282,10 @@ export const Visualizer3D: React.FC<Props> = ({ state, liveTraces }) => {
           action.startsWith('READ_') ||
           action.startsWith('SET_') ||
           action === 'BIND_ARG' ||
-          action === 'IF_COND'
+          action === 'IF_COND' ||
+          action === 'STATE_TRANSITION' ||
+          action === 'STATE_EVENT' ||
+          action === 'ERROR'
         ) {
           const entityId = lastActiveEntity.current;
 
@@ -291,6 +294,9 @@ export const Visualizer3D: React.FC<Props> = ({ state, liveTraces }) => {
 
             if (action.startsWith('SET_')) color = '#f39c12';
             if (action === 'IF_COND') color = '#ffeaa7';
+            if (action === 'STATE_TRANSITION') color = '#9b59b6';
+            if (action === 'STATE_EVENT') color = '#8e44ad';
+            if (action === 'ERROR') color = '#e74c3c';
 
             const shortTarget = trace.target?.includes(':')
               ? trace.target.split(':')[1]

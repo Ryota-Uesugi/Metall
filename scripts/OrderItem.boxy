@@ -1,0 +1,12 @@
+class OrderItem {
+    // 親エンティティが Order コンポーネントを持っている必要がある
+    require_parent Order;
+
+    string itemName = "";
+    int price = 0;
+
+    public fn initItem(string name, int p) {
+        this.itemName = name;
+        this.price = p;
+    }
+}

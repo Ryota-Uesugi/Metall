@@ -53,8 +53,8 @@ const App: React.FC = () => {
       const lastTraceStr = liveTraces[liveTraces.length - 1];
       try {
         const lastTrace = JSON.parse(lastTraceStr);
-        // エラー(THROW)またはRETURNで実行終了とみなす
-        if ((lastTrace.action === "RETURN" || lastTrace.action === "THROW") && lastTrace.target.includes(executingMethod)) {
+        // エラー(THROW または ERROR)またはRETURNで実行終了とみなす
+        if ((lastTrace.action === "RETURN" || lastTrace.action === "THROW" || lastTrace.action === "ERROR") && lastTrace.target.includes(executingMethod)) {
           setExecutingMethod(null);
           fetchState();
         }
@@ -80,10 +80,7 @@ const App: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', margin: 0, overflow: 'hidden', backgroundColor: '#1e1e1e', color: '#cccccc', fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif' }}>
-
-      {/* 新設：グローバルツールバー (Unity風) */}
       <Toolbar onUpdate={fetchState} isExecuting={executingMethod !== null} />
-
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <HierarchyPanel state={state} selectedId={selectedEntityId} onSelect={setSelectedEntityId} onUpdate={fetchState} width={leftWidth} isCollapsed={leftCollapsed} onToggle={() => setLeftCollapsed(!leftCollapsed)} />
         {!leftCollapsed && <div style={resizerStyle('horizontal')} onMouseDown={createDragHandler(leftWidth, setLeftWidth, 'horizontal', false)} />}

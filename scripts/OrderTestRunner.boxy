@@ -1,0 +1,55 @@
+class OrderTestRunner {
+    public fn RunAllTests() -> int {
+        this.setupOrders();
+        this.testSuccessfulPayment();
+        this.testFailedPayment();
+        this.testInvalidStateTransition();
+        return 1;
+    }
+
+    public fn setupOrders() -> int {
+        // ① 成功パターンのOrderを作成
+        this.createEntity("Order_Success");
+        // PaymentProcessorをアタッチすると、requires制約により自動的にOrderもアタッチされます
+        child.attachComponent("Order_Success", "PaymentProcessor");
+        this.getChild("Order_Success", "Order").init(1000);
+        
+        // require_parent制約のテストとして、Orderの子エンティティとしてOrderItemを追加
+        this.getChild("Order_Success", "Order").createItem("Item_Apple", 400);
+        this.getChild("Order_Success", "Order").createItem("Item_Banana", 600);
+
+        // ② 失敗パターンのOrderを作成
+        this.createEntity("Order_Fail");
+        child.attachComponent("Order_Fail", "PaymentProcessor");
+        this.getChild("Order_Fail", "Order").init(5000);
+
+        // ③ 不正遷移検証パターンのOrderを作成
+        this.createEntity("Order_Invalid");
+        child.attachComponent("Order_Invalid", "PaymentProcessor");
+        this.getChild("Order_Invalid", "Order").init(2000);
+
+        return 1;
+    }
+
+    public fn testSuccessfulPayment() -> int {
+        // 1000円必要な注文に対して1000円支払う -> Pending から Paid へ遷移
+        this.getChild("Order_Success", "Order").pay(1000);
+        
+        // Paid状態になったので Ship が可能になる -> Shipped へ遷移
+        this.getChild("Order_Success", "Order").ship();
+        return 1;
+    }
+
+    public fn testFailedPayment() -> int {
+        // 5000円必要な注文に対して3000円しか支払わない -> 例外が発生し Payment Failed になる
+        this.getChild("Order_Fail", "Order").pay(3000);
+        return 1;
+    }
+
+    public fn testInvalidStateTransition() -> int {
+        // Pending状態のまま、いきなり不正にShippedに上書きしようとする
+        // -> 新エンジンのフェイルファスト機能によって Error となりブロックされる
+        this.getChild("Order_Invalid", "Order").forceShip();
+        return 1;
+    }
+}

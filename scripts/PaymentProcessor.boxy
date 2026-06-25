@@ -1,0 +1,21 @@
+class PaymentProcessor {
+    // PaymentProcessorをアタッチすると、自動的にOrderも要求・アタッチされる
+    requires Order; 
+
+    public fn executePayment(int payAmount) -> bool {
+        try {
+            orderComp = this.getComponent("Order");
+            requiredAmount = orderComp.getTotal();
+
+            // 支払額が不足している場合は例外をスロー
+            if (payAmount < requiredAmount) {
+                throw "Insufficient payment amount";
+            }
+            
+            return true;
+        } catch (err) {
+            // 例外発生時は失敗としてfalseを返す
+            return false;
+        }
+    }
+}
