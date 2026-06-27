@@ -22,10 +22,7 @@ class EngineService {
     return null;
   }
 
-  // ★変更: エラーの理由を生データごと返すように強化
   private parseEngineOutput(data: any): any {
-    console.log("[EngineService] Raw Output:", data); // 開発者コンソールにも出力
-
     if (data === null || data === undefined) {
       return { status: 'error', message: 'No data returned from engine', rawData: String(data) };
     }
@@ -43,19 +40,15 @@ class EngineService {
         if (startIndex !== -1 && endIndex !== -1) {
           const jsonStr = rawText.substring(startIndex, endIndex + 1);
           const parsed = JSON.parse(jsonStr);
-          console.log("[EngineService] Parsed JSON:", parsed);
           return parsed;
         } else {
-          // JSONの波括弧が見つからない場合
           return { status: 'error', message: 'JSON object not found in string', rawData: rawText };
         }
       } catch (e: any) {
-        console.error('[EngineService] JSON Parse Error:', e, rawText);
         return { status: 'error', message: `Parse error: ${e.message}`, rawData: rawText };
       }
     }
     
-    // すでにオブジェクトとして正常に受け取っている場合
     return data;
   }
 
@@ -127,11 +120,23 @@ class EngineService {
     args: string[]
   ): Promise<any> {
     const argsStr = args.join(' ');
+    // ★修正: callwait から call (非同期バックグラウンド実行) に変更
     const data = await this.execute(
-      `callwait ${entityName} ${className} ${methodName} ${argsStr} -json`
+      `call ${entityName} ${className} ${methodName} ${argsStr} -json`
     );
     const parsed = this.parseEngineOutput(data);
     return parsed?.result ?? parsed?.message ?? parsed ?? 'No output from engine';
+  }
+
+  // ★追加: 実行中のタスク一覧の取得とキャンセル
+  async getTasks(): Promise<any[]> {
+    const data = await this.execute(`tasks -json`);
+    const parsed = this.parseEngineOutput(data);
+    return parsed?.tasks || [];
+  }
+
+  async cancelTask(taskId: number | 'all'): Promise<void> {
+    await this.execute(`cancel ${taskId} -json`);
   }
 
   async getState(): Promise<SystemState> {

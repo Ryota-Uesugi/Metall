@@ -12,208 +12,17 @@ interface Props {
   onToggle: () => void;
   isExecuting: boolean;
   onExecuteStart: (methodName: string) => void;
+  // ★追加: アコーディオンの開閉状態を親から受け取る
+  openSections: Record<string, boolean>;
+  onToggleSection: (className: string) => void;
 }
 
-// ==========================================
-// ★追加: SVGベースのステートマシン描画モーダル
-// ==========================================
-const StateMachineViewer: React.FC<{ data: any; onClose: () => void }> = ({ data, onClose }) => {
-  const machines = data.state_machines;
-
-  if (!machines || Object.keys(machines).length === 0) {
-    return (
-      <div style={modalStyles.overlay}>
-        <div style={modalStyles.content}>
-          <div style={modalStyles.header}>
-            <h3 style={modalStyles.title}>State Machine</h3>
-            <button onClick={onClose} style={modalStyles.closeBtn}>×</button>
-          </div>
-          <div style={{ padding: '24px', color: '#ccc', textAlign: 'center' }}>
-            No state machine defined for this component.
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const smName = Object.keys(machines)[0];
-  const states = machines[smName];
-
-  // キャンバスのサイズと円のレイアウト設定
-  const width = 640;
-  const height = 440;
-  const cx = width / 2;
-  const cy = height / 2;
-  const r = 140; // 配置の半径
-  const nodeRadius = 35; // 状態ノードの大きさ
-
-  // 各ノードの座標を計算して保存
-  const positions = new Map<string, { x: number, y: number }>();
-  states.forEach((s: any, i: number) => {
-    // 頂点(12時の方向)から時計回りに配置
-    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / states.length;
-    positions.set(s.name, {
-      x: cx + r * Math.cos(angle),
-      y: cy + r * Math.sin(angle)
-    });
-  });
-
-  return (
-    <div style={modalStyles.overlay} onClick={onClose}>
-      <div style={modalStyles.content} onClick={e => e.stopPropagation()}>
-        <div style={modalStyles.header}>
-          <h3 style={modalStyles.title}>State Machine: <span style={{ color: '#4facfe' }}>{smName}</span></h3>
-          <button onClick={onClose} style={modalStyles.closeBtn}>×</button>
-        </div>
-        <div style={{ padding: '0px', position: 'relative', backgroundColor: '#1e1e1e' }}>
-          <svg width={width} height={height}>
-            <defs>
-              {/* 通常の矢印マーカー */}
-              <marker id="arrowHead" markerWidth="10" markerHeight="10" refX={nodeRadius + 8} refY="5" orient="auto">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="#666" />
-              </marker>
-              {/* 現在アクティブな遷移の矢印マーカー */}
-              <marker id="arrowHeadActive" markerWidth="10" markerHeight="10" refX={nodeRadius + 8} refY="5" orient="auto">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="#4facfe" />
-              </marker>
-            </defs>
-
-            {/* エッジ（矢印）の描画 */}
-            {states.map((s: any) => {
-              const start = positions.get(s.name)!;
-              return s.allowed_transitions.map((targetName: string) => {
-                const end = positions.get(targetName);
-                if (!end) return null;
-
-                // 現在のステートからの遷移ならハイライトする
-                const isActiveTransition = s.is_current;
-
-                // 自己遷移（ループ）の場合の描画
-                if (start.x === end.x && start.y === end.y) {
-                  const offset = nodeRadius * 0.7;
-                  return (
-                    <path
-                      key={`${s.name}->self`}
-                      d={`M ${start.x + offset} ${start.y - offset} C ${start.x + nodeRadius * 2} ${start.y - nodeRadius * 2}, ${start.x + nodeRadius * 2} ${start.y + nodeRadius}, ${start.x + nodeRadius} ${start.y + offset}`}
-                      fill="none"
-                      stroke={isActiveTransition ? '#4facfe' : '#666'}
-                      strokeWidth={isActiveTransition ? 2 : 1.5}
-                      markerEnd={`url(#${isActiveTransition ? 'arrowHeadActive' : 'arrowHead'})`}
-                    />
-                  );
-                }
-
-                // 双方向遷移の場合に線が重ならないように法線ベクトルを使って少しずらす
-                const dx = end.x - start.x;
-                const dy = end.y - start.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                const nx = -dy / dist;
-                const ny = dx / dist;
-                const offset = 8; // ずらすピクセル数
-
-                const x1 = start.x + nx * offset;
-                const y1 = start.y + ny * offset;
-                const x2 = end.x + nx * offset;
-                const y2 = end.y + ny * offset;
-
-                return (
-                  <line
-                    key={`${s.name}->${targetName}`}
-                    x1={x1} y1={y1} x2={x2} y2={y2}
-                    stroke={isActiveTransition ? '#4facfe' : '#666'}
-                    strokeWidth={isActiveTransition ? 2 : 1.5}
-                    markerEnd={`url(#${isActiveTransition ? 'arrowHeadActive' : 'arrowHead'})`}
-                  />
-                );
-              });
-            })}
-
-            {/* ノード（円）の描画 */}
-            {states.map((s: any) => {
-              const pos = positions.get(s.name)!;
-              return (
-                <g key={s.name}>
-                  <circle
-                    cx={pos.x} cy={pos.y} r={nodeRadius}
-                    fill={s.is_current ? '#094771' : '#2d2d2d'}
-                    stroke={s.is_current ? '#4facfe' : '#555'}
-                    strokeWidth={s.is_current ? 3 : 1}
-                  />
-                  <text
-                    x={pos.x} y={pos.y}
-                    textAnchor="middle" dominantBaseline="central"
-                    fill={s.is_current ? '#ffffff' : '#cccccc'}
-                    fontSize="11"
-                    fontWeight={s.is_current ? 'bold' : 'normal'}
-                    pointerEvents="none"
-                  >
-                    {s.name}
-                  </text>
-
-                  {/* その状態に紐づくイベントリストを下部に表示 */}
-                  {s.events && s.events.length > 0 && (
-                    <text
-                      x={pos.x} y={pos.y + nodeRadius + 14}
-                      textAnchor="middle"
-                      fill={s.is_current ? '#a29bfe' : '#808080'}
-                      fontSize="9"
-                      fontWeight="bold"
-                    >
-                      {s.events.join(' | ')}
-                    </text>
-                  )}
-                </g>
-              );
-            })}
-          </svg>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const modalStyles: Record<string, React.CSSProperties> = {
-  overlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '100vw',
-    height: '100vh',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-
-    // ★修正: Dreiの<Html>の巨大なz-indexに勝つため、32bit整数の最大値を指定
-    zIndex: 2147483647,
-
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  content: {
-    width: '640px', backgroundColor: '#252526', borderRadius: '6px',
-    border: '1px solid #3c3c3c', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
-  },
-  header: {
-    padding: '12px 16px', backgroundColor: '#2d2d2d', borderBottom: '1px solid #3c3c3c',
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-  },
-  title: {
-    margin: 0, fontSize: '1rem', color: '#fff'
-  },
-  closeBtn: {
-    background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: '1.2rem'
-  }
-};
-// ==========================================
-
-
-export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, width, isCollapsed, onToggle, isExecuting, onExecuteStart }) => {
+export const InspectorPanel: React.FC<Props> = ({
+  state, selectedId, onUpdate, width, isCollapsed, onToggle,
+  isExecuting, onExecuteStart, openSections, onToggleSection
+}) => {
   const [methodName, setMethodName] = useState('');
   const [args, setArgs] = useState('');
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
-
-  // モーダル用のデータ状態管理
-  const [stateModalData, setStateModalData] = useState<any | null>(null);
 
   const entity = selectedId ? state.entities[selectedId] : null;
 
@@ -239,29 +48,10 @@ export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, w
     onUpdate();
   };
 
-  const toggleSection = (className: string) => {
-    setOpenSections(prev => ({ ...prev, [className]: !prev[className] }));
-  };
-
   const handleFieldUpdate = async (className: string, fieldName: string, value: string) => {
     if (!selectedId) return;
     await engineService.setFieldValue(selectedId, className, fieldName, value);
     onUpdate();
-  };
-
-  // ★追加: サーバーからステート情報をフェッチしてモーダルを開く
-  const handleShowState = async (className: string) => {
-    if (!selectedId) return;
-    const res = await engineService.getComponentState(selectedId, className);
-    if (res && res.status === 'success') {
-      if (res.state_machines && Object.keys(res.state_machines).length > 0) {
-        setStateModalData(res);
-      } else {
-        alert(`ステートマシンが定義されていません: ${className}`);
-      }
-    } else {
-      alert(`状態の取得に失敗しました: ${res?.message || 'Unknown Error'}`);
-    }
   };
 
   if (isCollapsed) return (<div style={{ width: '40px', backgroundColor: '#252526', display: 'flex', flexDirection: 'column', alignItems: 'center', borderLeft: '1px solid #1e1e1e', cursor: 'pointer' }} onClick={onToggle}><div style={{ padding: '16px 0', writingMode: 'vertical-rl', color: '#cccccc', fontSize: '0.85rem', letterSpacing: '2px', userSelect: 'none', transform: 'rotate(180deg)' }}>Inspector ◀</div></div>);
@@ -288,20 +78,15 @@ export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, w
 
         {entity.components.map((comp, idx) => {
           const blueprint = state.blueprint.classes[comp.className];
+          // ★変更: 親から渡された openSections を参照
           const isOpen = openSections[comp.className] === true;
 
           return (
             <div key={idx} style={{ backgroundColor: '#2d2d2d', marginBottom: '10px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #3c3c3c' }}>
-              <div style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', backgroundColor: '#383838', borderBottom: isOpen ? '1px solid #3c3c3c' : 'none' }} onClick={() => toggleSection(comp.className)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '0.7rem', color: '#808080', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.1s' }}>▶</span>
-                  <strong style={{ color: '#4facfe', fontSize: '0.9rem' }}>{comp.className}</strong>
-                </div>
-                {/* ★変更: Stateボタンを追加 */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <button onClick={(e) => { e.stopPropagation(); handleShowState(comp.className); }} style={{ backgroundColor: '#094771', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '0.75rem', padding: '2px 8px', borderRadius: '3px', fontWeight: 'bold' }} title="View State Machine">📊 State</button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDetach(comp.className); }} style={{ backgroundColor: 'transparent', color: '#f44336', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', lineHeight: 1 }} title="Remove Component">×</button>
-                </div>
+              {/* ★変更: onClick で onToggleSection を呼ぶ */}
+              <div style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', backgroundColor: '#383838', borderBottom: isOpen ? '1px solid #3c3c3c' : 'none' }} onClick={() => onToggleSection(comp.className)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ fontSize: '0.7rem', color: '#808080', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.1s' }}>▶</span><strong style={{ color: '#4facfe', fontSize: '0.9rem' }}>{comp.className}</strong></div>
+                <button onClick={(e) => { e.stopPropagation(); handleDetach(comp.className); }} style={{ backgroundColor: 'transparent', color: '#f44336', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px', lineHeight: 1 }} title="Remove Component">×</button>
               </div>
 
               {isOpen && (
@@ -363,11 +148,6 @@ export const InspectorPanel: React.FC<Props> = ({ state, selectedId, onUpdate, w
         </div>
 
       </div>
-
-      {/* ★追加: ステートマシン描画モーダルのレンダリング */}
-      {stateModalData && (
-        <StateMachineViewer data={stateModalData} onClose={() => setStateModalData(null)} />
-      )}
     </div>
   );
 };

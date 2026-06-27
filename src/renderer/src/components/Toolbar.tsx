@@ -1,3 +1,4 @@
+// src/components/Toolbar.tsx
 import React, { useEffect, useRef, useState } from 'react'
 import { engineService } from '../services/engineService'
 
@@ -200,6 +201,22 @@ export const Toolbar: React.FC<Props> = ({ onUpdate, isExecuting }) => {
                     {isExecuting ? 'EXECUTING' : 'IDLE'}
                   </div>
                 </div>
+
+                {/* ★追加: 実行中のみキャンセルボタンを表示 */}
+                {isExecuting && (
+                  <>
+                    <div style={styles.separator} />
+                    <button
+                      style={{ ...styles.dropdownItem, color: '#ff7675' }}
+                      onClick={async () => {
+                        await engineService.cancelTask('all');
+                        closeMenu();
+                      }}
+                    >
+                      <span>Stop All Tasks</span>
+                    </button>
+                  </>
+                )}
 
                 <div style={styles.separator} />
 
