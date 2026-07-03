@@ -1,0 +1,77 @@
+dependency Reviewer {}
+
+state Reviewer {
+    default Waiting : [Reviewing] {
+        onEnter() => {
+            global.log("Reviewer State: Waiting");
+        };
+
+        StartReview() => {
+            this.state = "Reviewer::Reviewing";
+        };
+    }
+
+    Reviewing : [Approved, Rejected] {
+        onEnter() => {
+            global.log("Reviewer State: Reviewing");
+        };
+
+        Approve() => {
+            this.state = "Reviewer::Approved";
+        };
+
+        Reject() => {
+            this.state = "Reviewer::Rejected";
+        };
+    }
+
+    Approved : [] {
+        onEnter() => {
+            global.log("Reviewer State: Approved");
+        };
+    }
+
+    Rejected : [] {
+        onEnter() => {
+            global.log("Reviewer State: Rejected");
+        };
+    }
+}
+
+class Reviewer {
+    string roleName = "";
+    bool willApprove = false;
+
+    public fn assignRole(int taskId) {
+        switch (taskId) {
+            0 => {
+                roleName = "Manager";
+                willApprove = true;
+            }
+            1 => {
+                roleName = "Director";
+                willApprove = false;
+            }
+            2 => {
+                roleName = "CEO";
+                willApprove = true;
+            }
+        }
+
+        global.log("  👤 レビュアーアサイン: ${roleName}");
+    }
+
+    public fn evaluate() -> bool {
+        this.send("StartReview");
+
+        global.log("  🔍 ${roleName} が審査中...");
+
+        if (willApprove == true) {
+            this.send("Approve");
+        } else {
+            this.send("Reject");
+        }
+
+        return willApprove;
+    }
+}

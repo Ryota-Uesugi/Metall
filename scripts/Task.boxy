@@ -1,0 +1,85 @@
+dependency Task {
+    require_child Reviewer;
+}
+
+state Task {
+    default Draft : [InReview] {
+        onEnter() => {
+            global.log("  -> Task State: Draft");
+        };
+
+        Submit() => {
+            this.state = "Task::InReview";
+        };
+    }
+
+    InReview : [Approved, Rejected] {
+        onEnter() => {
+            global.log("  -> 状態遷移: レビュー中");
+        };
+
+        Approve() => {
+            this.state = "Task::Approved";
+        };
+
+        Reject() => {
+            this.state = "Task::Rejected";
+        };
+    }
+
+    Approved : [] {
+        onEnter() => {
+            global.log("  -> 状態遷移: 承認済み 🎉");
+        };
+    }
+
+    Rejected : [] {
+        onEnter() => {
+            global.log("  -> 状態遷移: 却下 ❌");
+        };
+    }
+}
+
+class Task {
+    dict documentData;
+    int taskId = 0;
+    string title = "";
+    bool approved = false;
+
+    public fn setup(int id) {
+        taskId = id;
+        title = "申請書_${taskId}";
+
+        documentData = {
+            "id": taskId,
+            "title": title
+        };
+
+        global.log("📄 タスク作成: ${title}");
+
+        let reviewerName = "Reviewer_for_" + (taskId as string);
+
+        global.createEntity(reviewerName);
+        child.attachComponent(reviewerName, "Reviewer");
+
+        let reviewerComp = global.getChild(reviewerName, "Reviewer");
+        reviewerComp.assignRole(taskId);
+    }
+
+    public fn processTask() -> bool {
+        this.send("Submit");
+
+        let reviewerName = "Reviewer_for_" + (taskId as string);
+        let reviewerComp = global.getChild(reviewerName, "Reviewer");
+
+        approved = reviewerComp.evaluate();
+
+        if (approved == true) {
+            this.send("Approve");
+        } else {
+            this.send("Reject");
+        }
+
+        return approved;
+    }
+}
