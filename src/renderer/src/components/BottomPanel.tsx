@@ -1,6 +1,7 @@
 // src/components/BottomPanel.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { SystemState } from '../types/types';
+import { engineService } from '../services/engineService';
 
 interface Props {
   state: SystemState;
@@ -12,21 +13,46 @@ interface Props {
 }
 
 export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, height, isCollapsed, onToggle }) => {
-  const [activeTab, setActiveTab] = useState<'files' | 'console'>('files');
-  const consoleEndRef = useRef<HTMLDivElement>(null);
+  // ★ タブの種類を整理し、'cmd' を追加
+  const [activeTab, setActiveTab] = useState<'files' | 'traces' | 'cmd'>('cmd');
+  const traceEndRef = useRef<HTMLDivElement>(null);
+  const cmdEndRef = useRef<HTMLDivElement>(null);
+
+  const [cmdOutput, setCmdOutput] = useState<string>('');
+  const [cmdInput, setCmdInput] = useState<string>('');
 
   useEffect(() => {
-    if (isExecuting) {
-      setActiveTab('console');
+    // CMD出力の受け取り
+    engineService.onCmdOutput((data) => {
+      setCmdOutput(prev => prev + data);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (isExecuting && activeTab !== 'cmd') {
+      setActiveTab('cmd');
     }
-    if (activeTab === 'console' || isExecuting) {
-      consoleEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [isExecuting]);
+
+  useEffect(() => {
+    if (activeTab === 'traces' || isExecuting) {
+      traceEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [liveTraces.length, isExecuting, activeTab]);
+    if (activeTab === 'cmd' || isExecuting) {
+      cmdEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [liveTraces.length, cmdOutput, isExecuting, activeTab]);
+
+  const handleCmdSubmit = async () => {
+    if (!cmdInput) return;
+    setCmdOutput(prev => prev + '> ' + cmdInput + '\n');
+    await engineService.sendCmdInput(cmdInput);
+    setCmdInput('');
+  };
 
   const classes = Object.keys(state.blueprint.classes || {});
 
-  const tabStyle = (tab: 'files' | 'console'): React.CSSProperties => ({
+  const tabStyle = (tab: 'files' | 'traces' | 'cmd'): React.CSSProperties => ({
     padding: '8px 20px', cursor: 'pointer', backgroundColor: activeTab === tab ? '#1e1e1e' : 'transparent', color: activeTab === tab ? '#ffffff' : '#808080', borderTop: activeTab === tab ? '1px solid #00a8ff' : '1px solid transparent', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '6px'
   });
 
@@ -43,19 +69,11 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
         case 'THROW':
         case 'ERROR': color = '#ff7675'; icon = '❌'; bgColor = 'rgba(255, 118, 117, 0.1)'; break;
         case 'NEW': color = '#fdcb6e'; icon = '✨'; break;
-        case 'ATTACH_COMPONENT':
-        case 'DETACH_COMPONENT': color = '#e84393'; icon = '🧩'; break;
         case 'ENTRY': color = '#00cec9'; icon = '🚪'; break;
-        case 'GET_COMPONENT': color = '#74b9ff'; icon = '🔍'; break;
-        case 'GET_PARENT':
-        case 'GET_CHILD': color = '#e1b12c'; icon = '🤝'; break;
         case 'SET_LOCAL':
-        case 'SET_FIELD':
-        case 'SET_PROP': color = '#f39c12'; icon = '📝'; break;
+        case 'SET_FIELD': color = '#f39c12'; icon = '📝'; break;
         case 'READ_LOCAL':
-        case 'READ_FIELD':
-        case 'READ_PROP':
-        case 'READ_THIS': color = '#a29bfe'; icon = '📖'; break;
+        case 'READ_FIELD': color = '#a29bfe'; icon = '📖'; break;
         case 'BIND_ARG': color = '#55efc4'; icon = '🔗'; break;
         case 'IF_COND': color = '#ffeaa7'; icon = '🔀'; break;
         case 'STATE_TRANSITION': color = '#9b59b6'; icon = '🔄'; break;
@@ -74,7 +92,11 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
   return (
     <div style={{ height: `${height}px`, backgroundColor: '#252526', display: 'flex', flexDirection: 'column', borderTop: '1px solid #1e1e1e' }}>
       <div style={{ display: 'flex', backgroundColor: '#2d2d2d', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex' }}><div style={tabStyle('files')} onClick={() => setActiveTab('files')}>📁 Project</div><div style={tabStyle('console')} onClick={() => setActiveTab('console')}>🖥️ Console</div></div>
+        <div style={{ display: 'flex' }}>
+          <div style={tabStyle('files')} onClick={() => setActiveTab('files')}>📁 Project</div>
+          <div style={tabStyle('cmd')} onClick={() => setActiveTab('cmd')}>📟 CMD Terminal</div>
+          <div style={tabStyle('traces')} onClick={() => setActiveTab('traces')}>🖥️ Execution Traces</div>
+        </div>
         <div style={{ padding: '8px 16px', cursor: 'pointer', color: '#808080', fontSize: '0.8rem' }} onClick={onToggle}>▼ Collapse</div>
       </div>
 
@@ -90,7 +112,29 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
           </div>
         )}
 
-        {activeTab === 'console' && (
+        {/* ★ CMD(TCP)出力用のターミナル画面 */}
+        {activeTab === 'cmd' && (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', color: '#cccccc', fontFamily: '"Consolas", "Courier New", monospace', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+              {cmdOutput || <span style={{ color: '#808080', fontStyle: 'italic' }}>Waiting for CMD output on port 9092...</span>}
+              <div ref={cmdEndRef} />
+            </div>
+            <div style={{ padding: '8px 16px', backgroundColor: '#2d2d2d', borderTop: '1px solid #3c3c3c', display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <span style={{ color: '#4facfe', fontWeight: 'bold' }}>&gt;</span>
+              <input 
+                style={{ flex: 1, backgroundColor: 'transparent', border: 'none', color: '#fff', outline: 'none', fontFamily: '"Consolas", monospace', fontSize: '0.85rem' }}
+                type="text" 
+                value={cmdInput} 
+                onChange={e => setCmdInput(e.target.value)} 
+                onKeyDown={e => e.key === 'Enter' && handleCmdSubmit()}
+                placeholder="Send input to engine (e.g. readLine()...)"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* トレース（元々のConsoleタブ） */}
+        {activeTab === 'traces' && (
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', color: '#cccccc', fontFamily: '"Consolas", "Courier New", monospace', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
             {liveTraces.length > 0 ? (
               liveTraces.map((trace, idx) => (
@@ -98,13 +142,13 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
               ))
             ) : (
               <span style={{ color: '#808080', fontStyle: 'italic' }}>
-                {isExecuting ? '⏳ Executing...' : 'Waiting for connection on 127.0.0.1:9090...'}
+                {isExecuting ? '⏳ Executing...' : 'Waiting for connection on UDP 9090...'}
               </span>
             )}
             {liveTraces.length > 0 && !isExecuting && (
               <div style={{ marginTop: '8px', color: '#f39c12', fontWeight: 'bold' }}>🏁 Execution Finished. Data updated.</div>
             )}
-            <div ref={consoleEndRef} />
+            <div ref={traceEndRef} />
           </div>
         )}
       </div>

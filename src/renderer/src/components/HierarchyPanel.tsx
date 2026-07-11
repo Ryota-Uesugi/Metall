@@ -15,10 +15,13 @@ interface Props {
 
 export const HierarchyPanel: React.FC<Props> = ({ state, selectedId, onSelect, onUpdate, width, isCollapsed, onToggle }) => {
   const [newEntityName, setNewEntityName] = useState('');
+  const [newEntityClass, setNewEntityClass] = useState('');
+
+  const classes = Object.keys(state.blueprint?.classes || {});
 
   const handleCreate = async () => {
-    if (!newEntityName) return;
-    await engineService.createEntity(newEntityName, selectedId);
+    if (!newEntityName || !newEntityClass) return;
+    await engineService.createEntity(newEntityName, newEntityClass, selectedId);
     setNewEntityName('');
     onUpdate();
   };
@@ -49,11 +52,13 @@ export const HierarchyPanel: React.FC<Props> = ({ state, selectedId, onSelect, o
 
     return (
       <div key={entityId}>
-        {/* ★修正: アイテムのクリックイベントが親（背景）に伝播しないようにする */}
         <div style={itemStyle(entityId, depth)} onClick={(e) => { e.stopPropagation(); onSelect(entityId); }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '1rem' }}>{depth === 0 ? '🌍' : (entity.children?.length ? '🏢' : '👤')}</span>
-            {entity.id}
+            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+              <span>{entity.id}</span>
+              <span style={{ fontSize: '0.65rem', color: '#4facfe' }}>{entity.className}</span>
+            </span>
           </div>
           <span onClick={(e) => handleDelete(e, entity.id)} style={{ color: '#888', padding: '0 4px' }}>×</span>
         </div>
@@ -79,7 +84,6 @@ export const HierarchyPanel: React.FC<Props> = ({ state, selectedId, onSelect, o
         <span onClick={onToggle} style={{ cursor: 'pointer', padding: '0 4px' }}>◀</span>
       </div>
 
-      {/* ★修正: 空白部分（リストの背景）をクリックした時に選択解除(null)を行う */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }} onClick={() => onSelect(null)}>
         {roots.map(root => renderTree(root.id, 0))}
         {roots.length === 0 && <div style={{ padding: '12px', color: '#808080', fontSize: '0.85rem' }}>No entities found.</div>}
@@ -89,6 +93,14 @@ export const HierarchyPanel: React.FC<Props> = ({ state, selectedId, onSelect, o
         <div style={{ fontSize: '0.75rem', color: '#aaa', marginBottom: '8px', fontStyle: 'italic' }}>
           {selectedId ? `➕ Create child in [${selectedId}]` : `➕ Create Root Entity`}
         </div>
+        {/* ★変更: クラスを選択するためのセレクトボックスを追加 */}
+        <select
+          style={{ width: '100%', marginBottom: '8px', padding: '6px 8px', boxSizing: 'border-box', backgroundColor: '#3c3c3c', color: 'white', border: '1px solid #555555', borderRadius: '3px', outline: 'none', fontSize: '0.85rem' }}
+          value={newEntityClass} onChange={e => setNewEntityClass(e.target.value)}
+        >
+          <option value="">Select Class...</option>
+          {classes.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
         <input
           style={{ width: '100%', marginBottom: '8px', padding: '6px 8px', boxSizing: 'border-box', backgroundColor: '#3c3c3c', color: 'white', border: '1px solid #555555', borderRadius: '3px', outline: 'none', fontSize: '0.85rem' }}
           type="text" placeholder="New Entity Name" value={newEntityName} onChange={e => setNewEntityName(e.target.value)}
@@ -97,6 +109,7 @@ export const HierarchyPanel: React.FC<Props> = ({ state, selectedId, onSelect, o
         <button
           style={{ width: '100%', padding: '6px', cursor: 'pointer', backgroundColor: '#0e639c', color: 'white', border: 'none', borderRadius: '3px', fontSize: '0.85rem' }}
           onClick={handleCreate}
+          disabled={!newEntityClass || !newEntityName}
         >Create</button>
       </div>
     </div>

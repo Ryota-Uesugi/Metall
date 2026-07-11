@@ -41,33 +41,43 @@ export const EntityNode3D: React.FC<{
                 {entity.id}
             </Html>
 
-            {entity.components?.map((comp, idx) => {
-                const compHeight = 1.0;
-                const compY = 1.5 + idx * 1.2 + 0.5 * compHeight;
+            {/* クラス名をフローティング表示 */}
+            <Html
+                transform
+                position={[0, 2.0, buildingZ + 1.55]}
+                style={{
+                    color: '#4facfe',
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    pointerEvents: 'none',
+                    textShadow: '1px 1px 2px black',
+                    whiteSpace: 'nowrap',
+                }}
+            >
+                {entity.className}
+            </Html>
 
-                return (
-                    <group key={`${comp.className}-${idx}`} position={[0, compY, buildingZ]}>
-                        <Box args={[2.6, compHeight, 2.6]}>
-                            <meshStandardMaterial color="#4a90e2" roughness={0.2} metalness={0.5} />
-                        </Box>
-
-                        <Html
-                            transform
-                            position={[0, 0, 1.35]}
-                            style={{
-                                color: 'white',
-                                fontWeight: 'bold',
-                                fontSize: '12px',
-                                pointerEvents: 'none',
-                                textShadow: '1px 1px 2px black',
-                                whiteSpace: 'nowrap',
-                            }}
-                        >
-                            {comp.className}
-                        </Html>
-                    </group>
-                );
-            })}
+            {/* ステートが存在する場合は更に上にフローティング表示 */}
+            {entity.state && (
+                <Html
+                    transform
+                    position={[0, 2.6, buildingZ + 1.55]}
+                    style={{
+                        color: '#f39c12',
+                        fontWeight: 'bold',
+                        fontSize: '12px',
+                        pointerEvents: 'none',
+                        textShadow: '1px 1px 2px black',
+                        whiteSpace: 'nowrap',
+                        backgroundColor: 'rgba(0,0,0,0.5)',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        border: '1px solid #f39c12'
+                    }}
+                >
+                    {entity.state}
+                </Html>
+            )}
         </group>
     );
 };

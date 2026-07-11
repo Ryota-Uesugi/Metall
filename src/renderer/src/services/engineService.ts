@@ -10,6 +10,8 @@ declare global {
       setScriptsFolder: (folderPath: string) => Promise<{ ok: boolean; folderPath?: string; error?: string; }>;
       getScriptsFolder: () => Promise<string>;
       onLiveTrace?: (callback: (data: string) => void) => void;
+      onCmdOutput?: (callback: (data: string) => void) => void; // ★追加
+      sendCmdInput?: (text: string) => Promise<void>; // ★追加
     };
   }
 }
@@ -23,32 +25,25 @@ class EngineService {
   }
 
   private parseEngineOutput(data: any): any {
-    if (data === null || data === undefined) {
-      return { status: 'error', message: 'No data returned from engine', rawData: String(data) };
-    }
-
-    let rawText = data;
-    if (typeof data === 'object' && typeof data._consoleOutput === 'string') {
-      rawText = data._consoleOutput;
-    }
-
-    if (typeof rawText === 'string') {
-      try {
-        const startIndex = rawText.indexOf('{');
-        const endIndex = rawText.lastIndexOf('}');
-        
-        if (startIndex !== -1 && endIndex !== -1) {
-          const jsonStr = rawText.substring(startIndex, endIndex + 1);
-          const parsed = JSON.parse(jsonStr);
-          return parsed;
-        } else {
-          return { status: 'error', message: 'JSON object not found in string', rawData: rawText };
+    if (data && typeof data.raw === 'string') {
+      const raw = data.raw;
+      
+      if (raw.includes('===JSON_EXPORT_START===')) {
+        const s = raw.indexOf('===JSON_EXPORT_START===') + '===JSON_EXPORT_START==='.length;
+        const e = raw.indexOf('===JSON_EXPORT_END===');
+        if (s !== -1 && e !== -1) {
+          try { return JSON.parse(raw.substring(s, e)); } catch (err) {}
         }
-      } catch (e: any) {
-        return { status: 'error', message: `Parse error: ${e.message}`, rawData: rawText };
       }
+      
+      const s = raw.indexOf('{');
+      const e = raw.lastIndexOf('}');
+      if (s !== -1 && e !== -1) {
+        try { return JSON.parse(raw.substring(s, e + 1)); } catch (err) {}
+      }
+      
+      return raw;
     }
-    
     return data;
   }
 
@@ -61,6 +56,20 @@ class EngineService {
   onLiveTrace(callback: (log: string) => void) {
     if (window.engineAPI && window.engineAPI.onLiveTrace) {
       window.engineAPI.onLiveTrace(callback);
+    }
+  }
+
+  // ★ CMD出力受信用のリスナー
+  onCmdOutput(callback: (log: string) => void) {
+    if (window.engineAPI && window.engineAPI.onCmdOutput) {
+      window.engineAPI.onCmdOutput(callback);
+    }
+  }
+
+  // ★ CMD入力送信用のメソッド
+  async sendCmdInput(text: string): Promise<void> {
+    if (window.engineAPI && window.engineAPI.sendCmdInput) {
+      await window.engineAPI.sendCmdInput(text);
     }
   }
 
@@ -86,49 +95,38 @@ class EngineService {
 
   async setFieldValue(
     entityName: string,
-    componentName: string,
     fieldName: string,
     value: string
   ): Promise<void> {
     if (!value) return;
-    await this.execute(`set ${entityName} ${componentName} ${fieldName} ${value} -json`);
+    await this.execute(`set ${entityName} ${fieldName} ${value} -json`);
   }
 
   async createEntity(
     name: string,
+    className: string,
     parentName: string | null = null
   ): Promise<void> {
     if (parentName) {
-      await this.execute(`create ${name} ${parentName} -json`);
+      await this.execute(`create ${name} ${className} ${parentName} -json`);
     } else {
-      await this.execute(`create ${name} -json`);
+      await this.execute(`create ${name} ${className} -json`);
     }
-  }
-
-  async attachComponent(entityName: string, className: string): Promise<void> {
-    await this.execute(`attach ${entityName} ${className} -json`);
-  }
-
-  async detachComponent(entityName: string, className: string): Promise<void> {
-    await this.execute(`detach ${entityName} ${className} -json`);
   }
 
   async callMethod(
     entityName: string,
-    className: string,
     methodName: string,
     args: string[]
   ): Promise<any> {
     const argsStr = args.join(' ');
-    // ★修正: callwait から call (非同期バックグラウンド実行) に変更
     const data = await this.execute(
-      `call ${entityName} ${className} ${methodName} ${argsStr} -json`
+      `run ${entityName} ${methodName} ${argsStr} -json`
     );
     const parsed = this.parseEngineOutput(data);
     return parsed?.result ?? parsed?.message ?? parsed ?? 'No output from engine';
   }
 
-  // ★追加: 実行中のタスク一覧の取得とキャンセル
   async getTasks(): Promise<any[]> {
     const data = await this.execute(`tasks -json`);
     const parsed = this.parseEngineOutput(data);
@@ -158,9 +156,9 @@ class EngineService {
     };
   }
 
-  async getComponentState(entityName: string, componentName: string): Promise<any> {
+  async getEntityState(entityName: string): Promise<any> {
     try {
-      const data = await this.execute(`state ${entityName} ${componentName} -json`);
+      const data = await this.execute(`state ${entityName} -json`);
       return this.parseEngineOutput(data);
     } catch (e: any) {
       return { status: 'error', message: `API Request Failed: ${e.message}`, rawData: null };

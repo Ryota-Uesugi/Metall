@@ -1,3 +1,4 @@
+// src/components/ControlPanel.tsx
 import React, { useState } from 'react';
 import { SystemState } from '../types/types';
 import { engineService } from '../services/engineService';
@@ -9,13 +10,10 @@ interface ControlPanelProps {
 
 export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) => {
   const [newEntityName, setNewEntityName] = useState('');
-  const [createParent, setCreateParent] = useState(''); // ★変更: isLandから親選択へ
-
-  const [attachEntity, setAttachEntity] = useState('');
-  const [attachClass, setAttachClass] = useState('');
+  const [newEntityClass, setNewEntityClass] = useState('');
+  const [createParent, setCreateParent] = useState('');
 
   const [callEntity, setCallEntity] = useState('');
-  const [callComponent, setCallComponent] = useState('');
   const [methodName, setMethodName] = useState('');
   const [args, setArgs] = useState('');
   const [result, setResult] = useState<string | null>(null);
@@ -24,23 +22,16 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) =
   const availableClasses = Object.keys(state.blueprint.classes);
 
   const handleCreateEntity = async () => {
-    if (!newEntityName) return;
-    await engineService.createEntity(newEntityName, createParent || null);
+    if (!newEntityName || !newEntityClass) return;
+    await engineService.createEntity(newEntityName, newEntityClass, createParent || null);
     setNewEntityName('');
     onUpdate();
   };
 
-  const handleAttach = async () => {
-    if (!attachEntity || !attachClass) return;
-    await engineService.attachComponent(attachEntity, attachClass);
-    setAttachClass('');
-    onUpdate();
-  };
-
   const handleCall = async () => {
-    if (!callEntity || !callComponent || !methodName) return;
+    if (!callEntity || !methodName) return;
     const argList = args.split(',').map(s => s.trim()).filter(Boolean);
-    const res = await engineService.callMethod(callEntity, callComponent, methodName, argList);
+    const res = await engineService.callMethod(callEntity, methodName, argList);
     setResult(JSON.stringify(res, null, 2));
     onUpdate();
   };
@@ -48,12 +39,10 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) =
   const panelStyle: React.CSSProperties = { padding: '16px', borderBottom: '1px solid #dcdde1' };
   const inputStyle: React.CSSProperties = { width: '100%', marginBottom: '8px', padding: '6px', boxSizing: 'border-box' };
 
-  const attachedComponents = callEntity && state.entities[callEntity]
-    ? state.entities[callEntity].components.map(c => c.className)
-    : [];
-
-  const availableMethods = callComponent && state.blueprint.classes[callComponent]
-    ? state.blueprint.classes[callComponent].methods.map(m => m.name)
+  // 選択されたEntityのクラスを特定し、そのクラスが持つメソッド一覧を取得する
+  const selectedEntityClass = callEntity && state.entities[callEntity] ? state.entities[callEntity].className : null;
+  const availableMethods = selectedEntityClass && state.blueprint.classes[selectedEntityClass]
+    ? state.blueprint.classes[selectedEntityClass].methods.map(m => m.name)
     : [];
 
   return (
@@ -65,41 +54,29 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ state, onUpdate }) =
       <div style={panelStyle}>
         <h3 style={{ fontSize: '1rem' }}>① Create Entity</h3>
         <input style={inputStyle} type="text" placeholder="Entity Name" value={newEntityName} onChange={e => setNewEntityName(e.target.value)} />
+
+        <select style={inputStyle} value={newEntityClass} onChange={e => setNewEntityClass(e.target.value)}>
+          <option value="">Select Class...</option>
+          {availableClasses.map(cls => <option key={cls} value={cls}>{cls}</option>)}
+        </select>
+
         <select style={inputStyle} value={createParent} onChange={e => setCreateParent(e.target.value)}>
           <option value="">No Parent (Root)</option>
           {entityNames.map(name => <option key={name} value={name}>{name}</option>)}
         </select>
-        <button style={inputStyle} onClick={handleCreateEntity}>Create</button>
+
+        <button style={inputStyle} onClick={handleCreateEntity} disabled={!newEntityName || !newEntityClass}>Create</button>
       </div>
 
       <div style={panelStyle}>
-        <h3 style={{ fontSize: '1rem' }}>② Attach Component</h3>
-        <select style={inputStyle} value={attachEntity} onChange={e => setAttachEntity(e.target.value)}>
-          <option value="">Select Entity...</option>
-          {entityNames.map(name => <option key={name} value={name}>{name}</option>)}
-        </select>
-
-        <select style={inputStyle} value={attachClass} onChange={e => setAttachClass(e.target.value)}>
-          <option value="">Select Class...</option>
-          {availableClasses.map(cls => <option key={cls} value={cls}>{cls}</option>)}
-        </select>
-        <button style={inputStyle} onClick={handleAttach}>Attach</button>
-      </div>
-
-      <div style={panelStyle}>
-        <h3 style={{ fontSize: '1rem' }}>③ Execute Method</h3>
-        <select style={inputStyle} value={callEntity} onChange={e => { setCallEntity(e.target.value); setCallComponent(''); setMethodName(''); }}>
+        <h3 style={{ fontSize: '1rem' }}>② Execute Method</h3>
+        <select style={inputStyle} value={callEntity} onChange={e => { setCallEntity(e.target.value); setMethodName(''); }}>
           <option value="">1. Select Entity...</option>
           {entityNames.map(name => <option key={name} value={name}>{name}</option>)}
         </select>
 
-        <select style={inputStyle} value={callComponent} onChange={e => { setCallComponent(e.target.value); setMethodName(''); }} disabled={!callEntity}>
-          <option value="">2. Select Component...</option>
-          {attachedComponents.map(cls => <option key={cls} value={cls}>{cls}</option>)}
-        </select>
-
-        <select style={inputStyle} value={methodName} onChange={e => setMethodName(e.target.value)} disabled={!callComponent}>
-          <option value="">3. Select Method...</option>
+        <select style={inputStyle} value={methodName} onChange={e => setMethodName(e.target.value)} disabled={!callEntity}>
+          <option value="">2. Select Method...</option>
           {availableMethods.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
 
