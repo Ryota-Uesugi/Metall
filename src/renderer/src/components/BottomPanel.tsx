@@ -1,7 +1,15 @@
 // src/components/BottomPanel.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { SystemState } from '../types/types';
 import { engineService } from '../services/engineService';
+
+export type FileNode = {
+  name: string;
+  type: 'folder' | 'file';
+  className?: string; // ファイルの場合、アタッチ用のクラス名
+  children?: FileNode[];
+  error?: string; // ★追加: エラー内容を保持
+};
 
 interface Props {
   state: SystemState;
@@ -13,16 +21,16 @@ interface Props {
 }
 
 export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, height, isCollapsed, onToggle }) => {
-  // ★ タブの種類を整理し、'cmd' を追加
-  const [activeTab, setActiveTab] = useState<'files' | 'traces' | 'cmd'>('cmd');
+  const [activeTab, setActiveTab] = useState<'files' | 'traces' | 'cmd'>('files');
   const traceEndRef = useRef<HTMLDivElement>(null);
   const cmdEndRef = useRef<HTMLDivElement>(null);
 
   const [cmdOutput, setCmdOutput] = useState<string>('');
   const [cmdInput, setCmdInput] = useState<string>('');
 
+  const [currentPath, setCurrentPath] = useState<string[]>([]);
+
   useEffect(() => {
-    // CMD出力の受け取り
     engineService.onCmdOutput((data) => {
       setCmdOutput(prev => prev + data);
     });
@@ -50,7 +58,47 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
     setCmdInput('');
   };
 
-  const classes = Object.keys(state.blueprint.classes || {});
+  // ★変更: サーバーから送られてくる fileTree データを優先し、未実装の時は既存のフラットリストを使う
+  const fileTree: FileNode[] = useMemo(() => {
+    const s = state as any;
+    if (s.fileTree && Array.isArray(s.fileTree)) {
+      return s.fileTree;
+    }
+    
+    // フォールバック（エンジン側が未改修のときの動作）
+    const classes = Object.keys(state.blueprint.classes || {});
+    return classes.map(cls => ({
+      name: `${cls}.boxy`,
+      type: 'file' as const,
+      className: cls
+    }));
+  }, [state]);
+
+  // 現在のパスの中身（フォルダ内）を取得するロジック
+  const currentFolderContents = useMemo(() => {
+    let current: FileNode[] = fileTree;
+    for (const folderName of currentPath) {
+      const found = current.find(n => n.type === 'folder' && n.name === folderName);
+      if (found && found.children) {
+        current = found.children;
+      } else {
+        return [];
+      }
+    }
+    return current;
+  }, [currentPath, fileTree]);
+
+  const handleNavigateDown = (folderName: string) => {
+    setCurrentPath(prev => [...prev, folderName]);
+  };
+
+  const handleNavigateUp = () => {
+    setCurrentPath(prev => prev.slice(0, -1));
+  };
+
+  const handleNavigateBreadcrumb = (index: number) => {
+    setCurrentPath(prev => prev.slice(0, index + 1));
+  };
 
   const tabStyle = (tab: 'files' | 'traces' | 'cmd'): React.CSSProperties => ({
     padding: '8px 20px', cursor: 'pointer', backgroundColor: activeTab === tab ? '#1e1e1e' : 'transparent', color: activeTab === tab ? '#ffffff' : '#808080', borderTop: activeTab === tab ? '1px solid #00a8ff' : '1px solid transparent', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '6px'
@@ -59,9 +107,7 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
   const formatTrace = (traceStr: string) => {
     try {
       const t = JSON.parse(traceStr);
-      let color = '#cccccc';
-      let icon = '🔹';
-      let bgColor = 'transparent';
+      let color = '#cccccc'; let icon = '🔹'; let bgColor = 'transparent';
 
       switch (t.action) {
         case 'CALL': color = '#4facfe'; icon = '▶️'; break;
@@ -80,7 +126,6 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
         case 'STATE_EVENT': color = '#8e44ad'; icon = '⚡'; break;
         default: break;
       }
-
       return `<div style="background-color:${bgColor}; padding: 2px 4px; border-radius: 2px;"><span style="color:${color}">${icon} [${t.action}] <b>${t.target}</b> ${t.value ? `=> <span style="color:#ce9178">${t.value}</span>` : ''}</span></div>`;
     } catch (e) {
       return `<div>${traceStr}</div>`;
@@ -101,18 +146,106 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
       </div>
 
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', backgroundColor: '#1e1e1e' }}>
+        
+        {/* エクスプローラ風のファイルシステム表示 */}
         {activeTab === 'files' && (
-          <div style={{ display: 'flex', padding: '16px', gap: '16px', overflowX: 'auto', alignItems: 'flex-start', flex: 1 }}>
-            {classes.map(className => (
-              <div key={className} draggable onDragStart={(e) => e.dataTransfer.setData('boxy-component', className)} style={{ width: '90px', textAlign: 'center', cursor: 'grab', padding: '12px 8px', backgroundColor: '#252526', borderRadius: '4px', border: '1px solid #333', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', userSelect: 'none', transition: 'transform 0.1s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
-                <div style={{ fontSize: '2.5rem', marginBottom: '8px', color: '#dcdcaa' }}>📄</div><div style={{ fontSize: '0.75rem', wordBreak: 'break-all', color: '#cccccc' }}>{className}.boxy</div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            
+            {/* アドレスバー（パンくずリスト） */}
+            <div style={{ padding: '6px 12px', backgroundColor: '#252526', borderBottom: '1px solid #3c3c3c', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
+              <button 
+                onClick={handleNavigateUp} 
+                disabled={currentPath.length === 0}
+                style={{ background: 'transparent', border: 'none', color: currentPath.length === 0 ? '#555' : '#ccc', cursor: currentPath.length === 0 ? 'default' : 'pointer', fontSize: '1.2rem', padding: '0 4px', display: 'flex', alignItems: 'center' }}
+                title="Go up"
+              >
+                ↑
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', color: '#cccccc' }}>
+                <span 
+                  onClick={() => setCurrentPath([])} 
+                  style={{ cursor: 'pointer', padding: '2px 6px', borderRadius: '4px', transition: '0.1s' }} 
+                  onMouseOver={e => e.currentTarget.style.backgroundColor='#333'} 
+                  onMouseOut={e => e.currentTarget.style.backgroundColor='transparent'}
+                >
+                  Root
+                </span>
+                {currentPath.map((folder, idx) => (
+                  <React.Fragment key={idx}>
+                    <span style={{ margin: '0 4px', color: '#555' }}>/</span>
+                    <span 
+                      onClick={() => handleNavigateBreadcrumb(idx)}
+                      style={{ cursor: 'pointer', padding: '2px 6px', borderRadius: '4px', transition: '0.1s' }} 
+                      onMouseOver={e => e.currentTarget.style.backgroundColor='#333'} 
+                      onMouseOut={e => e.currentTarget.style.backgroundColor='transparent'}
+                    >
+                      {folder}
+                    </span>
+                  </React.Fragment>
+                ))}
               </div>
-            ))}
-            {classes.length === 0 && <div style={{ color: '#808080', padding: '8px', fontSize: '0.85rem' }}>No .boxy files found.</div>}
+            </div>
+
+            {/* ファイル/フォルダのグリッド一覧 */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexWrap: 'wrap', gap: '12px', alignContent: 'flex-start' }}>
+              {currentFolderContents.map((node, idx) => {
+                
+                // フォルダの描画
+                if (node.type === 'folder') {
+                  return (
+                    <div 
+                      key={`folder-${node.name}-${idx}`} 
+                      onClick={() => handleNavigateDown(node.name)}
+                      style={{ width: '70px', textAlign: 'center', cursor: 'pointer', padding: '8px 4px', backgroundColor: 'transparent', borderRadius: '6px', transition: 'background-color 0.1s', userSelect: 'none' }} 
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = '#2a2d2e'} 
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                      title={node.name}
+                    >
+                      <div style={{ fontSize: '2.5rem', marginBottom: '6px', color: '#dcb67a', lineHeight: 1 }}>📁</div>
+                      <div style={{ fontSize: '0.75rem', wordBreak: 'break-word', color: '#cccccc', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        {node.name}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ★ファイルの描画（エラーがあれば赤くハイライトしてドラッグを禁止）
+                const isError = !!node.error;
+                return (
+                  <div 
+                    key={`file-${node.name}-${idx}`} 
+                    draggable={!isError && !!node.className}
+                    onDragStart={(e) => { 
+                      if (!isError && node.className) e.dataTransfer.setData('boxy-component', node.className); 
+                    }}
+                    style={{ 
+                      width: '70px', textAlign: 'center', 
+                      cursor: isError ? 'not-allowed' : (node.className ? 'grab' : 'default'), 
+                      padding: '8px 4px', 
+                      backgroundColor: isError ? 'rgba(231, 76, 60, 0.1)' : 'transparent',
+                      border: isError ? '1px solid rgba(231, 76, 60, 0.5)' : '1px solid transparent',
+                      borderRadius: '6px', transition: 'background-color 0.1s', userSelect: 'none' 
+                    }} 
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = isError ? 'rgba(231, 76, 60, 0.2)' : '#2a2d2e'} 
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = isError ? 'rgba(231, 76, 60, 0.1)' : 'transparent'}
+                    title={isError ? `❌ Parse Error:\n${node.error}` : node.name}
+                  >
+                    <div style={{ fontSize: '2.5rem', marginBottom: '6px', color: isError ? '#e74c3c' : (node.className ? '#4facfe' : '#888'), lineHeight: 1 }}>📄</div>
+                    <div style={{ fontSize: '0.75rem', wordBreak: 'break-word', color: isError ? '#e74c3c' : '#cccccc', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {node.name}
+                    </div>
+                  </div>
+                );
+              })}
+              
+              {currentFolderContents.length === 0 && (
+                 <div style={{ color: '#808080', fontSize: '0.85rem', width: '100%', textAlign: 'center', padding: '40px 0' }}>This folder is empty.</div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* ★ CMD(TCP)出力用のターミナル画面 */}
+        {/* CMD(TCP)出力用のターミナル画面 */}
         {activeTab === 'cmd' && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', color: '#cccccc', fontFamily: '"Consolas", "Courier New", monospace', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
@@ -133,7 +266,7 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
           </div>
         )}
 
-        {/* トレース（元々のConsoleタブ） */}
+        {/* トレース（Execution Traces） */}
         {activeTab === 'traces' && (
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', color: '#cccccc', fontFamily: '"Consolas", "Courier New", monospace', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
             {liveTraces.length > 0 ? (

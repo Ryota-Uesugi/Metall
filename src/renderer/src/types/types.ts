@@ -16,11 +16,12 @@ export interface SystemBlueprint {
 
 export interface EntityData {
   id: string;
-  className: string; // ★ Component配列から単一のクラス名に変更
+  className: string;
+  components: string[]; 
   parentId: string | null;
   children: string[];
   fields: Record<string, any>;
-  state?: string; // 現在のステート（例: "Movement::Idle"）
+  state?: string;
 }
 
 export interface SystemState {

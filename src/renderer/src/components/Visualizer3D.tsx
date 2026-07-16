@@ -9,15 +9,15 @@ import { EntityNode3D, InternalFlash, ExternalFlow } from './VisualizerNodes';
 const layoutManager = new LayoutManager();
 
 type FlowActivity =
-  | { id: number; type: 'internal'; label: string; entityId: string; color: string; }
-  | { id: number; type: 'external'; label: string; sourceEntityId: string; targetEntityId: string; color: string; };
+  | { id: number; type: 'internal'; label: string; entityId: string; targetClass?: string; targetMethod?: string; color: string; }
+  | { id: number; type: 'external'; label: string; sourceEntityId: string; targetEntityId: string; targetClass?: string; targetMethod?: string; color: string; };
 
 interface Props {
   state: SystemState;
   liveTraces: string[];
   activeEntityId?: string | null;
   rightMargin: number;
-  bottomMargin: number; // ※右上配置にしたため内部では使わなくなりますが、互換性のため残しています
+  bottomMargin: number;
 }
 
 export const Visualizer3D: React.FC<Props> = ({ state, liveTraces, rightMargin }) => {
@@ -29,8 +29,8 @@ export const Visualizer3D: React.FC<Props> = ({ state, liveTraces, rightMargin }
   const callStack = useRef<string[]>([]);
 
   useMemo(() => {
-    layoutManager.computeLayout(state.entities);
-  }, [state.entities]);
+    layoutManager.computeLayout(state.entities, state.blueprint);
+  }, [state.entities, state.blueprint]);
 
   const removeActivity = useCallback((id: number) => {
     setActivities(prev => prev.filter(a => a.id !== id));
@@ -50,12 +50,12 @@ export const Visualizer3D: React.FC<Props> = ({ state, liveTraces, rightMargin }
     const newTraces = liveTraces.slice(processedCount.current);
     processedCount.current = liveTraces.length;
 
-    const addExternalFlow = (label: string, sourceEntityId: string, targetEntityId: string, color: string) => {
-      setActivities(prev => [...prev, { id: flowIdCounter.current++, type: 'external', label, sourceEntityId, targetEntityId, color }]);
+    const addExternalFlow = (label: string, sourceEntityId: string, targetEntityId: string, targetClass: string | undefined, targetMethod: string | undefined, color: string) => {
+      setActivities(prev => [...prev, { id: flowIdCounter.current++, type: 'external', label, sourceEntityId, targetEntityId, targetClass, targetMethod, color }]);
     };
 
-    const addInternalFlash = (label: string, entityId: string, color: string) => {
-      setActivities(prev => [...prev, { id: flowIdCounter.current++, type: 'internal', label, entityId, color }]);
+    const addInternalFlash = (label: string, entityId: string, targetClass: string | undefined, targetMethod: string | undefined, color: string) => {
+      setActivities(prev => [...prev, { id: flowIdCounter.current++, type: 'internal', label, entityId, targetClass, targetMethod, color }]);
     };
 
     newTraces.forEach(traceStr => {
@@ -66,36 +66,55 @@ export const Visualizer3D: React.FC<Props> = ({ state, liveTraces, rightMargin }
         if (action === 'NEW' || action === 'DESTROY') return;
 
         let targetEntityId: string | null = null;
-        let targetClass = '';
+        let targetClass: string | undefined = undefined;
+        let targetMethod: string | undefined = undefined;
         let isReturn = false;
         let isQuery = false;
 
         if (action === 'ENTRY') {
           const parts = trace.target.split('@');
           if (parts.length > 1) {
+            targetMethod = parts[0];
             targetEntityId = parts[1];
             if (!lastActiveEntity.current) { lastActiveEntity.current = targetEntityId; }
             callStack.current = [];
           }
         } else if (action === 'RECEIVER') {
           targetEntityId = trace.value;
-          targetClass = trace.target.split('#')[0];
+          const dotSplit = trace.target.split('.');
+          if (dotSplit.length > 1) {
+            targetMethod = dotSplit[1];
+            targetClass = dotSplit[0].split('#')[0];
+          } else {
+            targetClass = trace.target.split('#')[0];
+          }
+        } else if (action === 'RETURN' || action === 'THROW') {
+          const parts = trace.target.split('@');
+          if (parts.length > 1) {
+            targetMethod = parts[0];
+          } else {
+            const dotSplit = trace.target.split('.');
+            if (dotSplit.length > 1) {
+               targetMethod = dotSplit[1];
+               targetClass = dotSplit[0].split('#')[0];
+            }
+          }
+          isReturn = true;
         } else if (action === 'GET_PARENT' || action === 'GET_CHILD') {
           targetClass = trace.target;
           targetEntityId = trace.value.split(' -> ')[0];
           isQuery = true;
-        } else if (action === 'RETURN') {
-          isReturn = true;
         }
 
         const sourceEntityId = lastActiveEntity.current;
 
         if (action === 'RECEIVER' && targetEntityId) {
           callStack.current.push(sourceEntityId || targetEntityId);
+          const methodLabel = targetMethod || targetClass || 'Method';
           if (sourceEntityId && sourceEntityId !== targetEntityId) {
-            addExternalFlow(`➔ CALL ${targetClass}`, sourceEntityId, targetEntityId, '#4facfe');
+            addExternalFlow(`➔ CALL ${methodLabel}`, sourceEntityId, targetEntityId, targetClass, targetMethod, '#4facfe');
           } else if (sourceEntityId === targetEntityId) {
-            addInternalFlash(`CALL ${targetClass}`, targetEntityId, '#4facfe');
+            addInternalFlash(`CALL ${methodLabel}`, targetEntityId, targetClass, targetMethod, '#4facfe');
           }
           lastActiveEntity.current = targetEntityId;
         } else if (isReturn) {
@@ -103,17 +122,17 @@ export const Visualizer3D: React.FC<Props> = ({ state, liveTraces, rightMargin }
           if (returnTo) {
             const shortVal = String(trace.value).replace('Instance(', '').replace('Int(', '').replace('String(', '').replace(')', '');
             if (sourceEntityId && sourceEntityId !== returnTo) {
-              addExternalFlow(`↩ ${shortVal}`, sourceEntityId, returnTo, '#2ecc71');
+              addExternalFlow(`↩ ${shortVal}`, sourceEntityId, returnTo, undefined, undefined, '#2ecc71');
             } else {
-              addInternalFlash(`↩ ${shortVal}`, returnTo, '#2ecc71');
+              addInternalFlash(`↩ ${shortVal}`, returnTo, undefined, targetMethod, '#2ecc71');
             }
             lastActiveEntity.current = returnTo;
           }
         } else if (isQuery && targetEntityId) {
           if (sourceEntityId && sourceEntityId !== targetEntityId) {
-            addExternalFlow(`🔍 ${action}`, sourceEntityId, targetEntityId, '#e1b12c');
+            addExternalFlow(`🔍 ${action}`, sourceEntityId, targetEntityId, undefined, undefined, '#e1b12c');
           } else if (sourceEntityId) {
-            addInternalFlash(`🔍 ${action}`, sourceEntityId, '#e1b12c');
+            addInternalFlash(`🔍 ${action}`, sourceEntityId, undefined, undefined, '#e1b12c');
           }
         } else if (action.startsWith('READ_') || action.startsWith('SET_') || action === 'BIND_ARG' || action === 'IF_COND' || action === 'STATE_TRANSITION' || action === 'STATE_EVENT' || action === 'ERROR') {
           const entityId = lastActiveEntity.current;
@@ -127,7 +146,8 @@ export const Visualizer3D: React.FC<Props> = ({ state, liveTraces, rightMargin }
 
             const shortTarget = trace.target?.includes(':') ? trace.target.split(':')[1] : trace.target;
             const shortLabel = `${action.split('_')[0]} ${shortTarget}`;
-            addInternalFlash(shortLabel, entityId, color);
+            
+            addInternalFlash(shortLabel, entityId, undefined, undefined, color);
           }
         }
       } catch (e) {}
@@ -147,30 +167,27 @@ export const Visualizer3D: React.FC<Props> = ({ state, liveTraces, rightMargin }
         {entityList.map(entity => {
           const node = layoutManager.nodes.get(entity.id);
           if (!node) return null;
-          return <EntityNode3D key={`node-${entity.id}`} entity={entity} node={node} />;
+          return <EntityNode3D key={`node-${entity.id}`} entity={entity} node={node} blueprint={state.blueprint} />;
         })}
 
         {activities.map(act => {
           if (act.type === 'internal') {
-            const info = layoutManager.getComponentInfo(act.entityId, 0);
+            const info = layoutManager.getComponentEffectInfo(act.entityId, act.targetClass, act.targetMethod, state.blueprint, state.entities);
             if (!info) return null;
-            return <InternalFlash key={act.id} pos={info.pos} scale={info.scale} label={act.label} color={act.color} onComplete={() => removeActivity(act.id)} />;
+            return <InternalFlash key={act.id} pos={info.pos} size={info.size} height={info.height} label={act.label} color={act.color} onComplete={() => removeActivity(act.id)} />;
           }
 
-          const sourceInfo = layoutManager.getComponentInfo(act.sourceEntityId, 0);
-          const targetInfo = layoutManager.getComponentInfo(act.targetEntityId, 0);
+          const sourceInfo = layoutManager.getComponentEffectInfo(act.sourceEntityId, undefined, undefined, state.blueprint, state.entities);
+          const targetInfo = layoutManager.getComponentEffectInfo(act.targetEntityId, act.targetClass, act.targetMethod, state.blueprint, state.entities);
           if (!sourceInfo || !targetInfo) return null;
-          return <ExternalFlow key={act.id} startPos={sourceInfo.pos} endPos={targetInfo.pos} scale={Math.max(sourceInfo.scale, targetInfo.scale)} label={act.label} color={act.color} onComplete={() => removeActivity(act.id)} />;
+          
+          return <ExternalFlow key={act.id} startPos={sourceInfo.pos} endPos={targetInfo.pos} label={act.label} color={act.color} onComplete={() => removeActivity(act.id)} />;
         })}
 
         <OrbitControls makeDefault />
 
-        {/* ★修正: ギズモを右上（インスペクター横の上）に移動し、サイズを0.75倍に縮小、マージンを広く */}
-        <GizmoHelper
-          alignment="top-right"
-          margin={[rightMargin + 50, 40]} // インスペクター幅 + 余白(64px)、上からの余白(64px)
-        >
-          <group scale={0.65}>
+        <GizmoHelper alignment="top-right" margin={[rightMargin + 64, 64]}>
+          <group scale={0.75}>
             <GizmoViewport axisColors={['#ff4757', '#2ed573', '#1e90ff']} labelColor="white" />
           </group>
         </GizmoHelper>
