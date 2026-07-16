@@ -14,13 +14,11 @@ if (process.contextIsolated) {
         ipcRenderer.invoke('engine-command', command),
 
       onEngineStream: (callback: (data: string) => void) => {
-        // ★ 古いリスナーを削除して重複を防ぐ
         ipcRenderer.removeAllListeners('engine-stream')
         ipcRenderer.on('engine-stream', (_event, value) => callback(value))
       },
 
       onLiveTrace: (callback: (data: string) => void) => {
-        // ★ 古いリスナーを削除して重複を防ぐ
         ipcRenderer.removeAllListeners('live-trace')
         ipcRenderer.on('live-trace', (_event, value) => callback(value))
       },
@@ -35,13 +33,16 @@ if (process.contextIsolated) {
         ipcRenderer.invoke('engine:get-scripts-folder'),
 
       onCmdOutput: (callback: (data: string) => void) => {
-        // ★ 古いリスナーを削除して重複を防ぐ
         ipcRenderer.removeAllListeners('cmd-output')
         ipcRenderer.on('cmd-output', (_event, value) => callback(value))
       },
 
       sendCmdInput: (text: string) =>
-        ipcRenderer.invoke('engine:cmd-input', text)
+        ipcRenderer.invoke('engine:cmd-input', text),
+
+      // ★ 追加: メインプロセスにエクスプローラーを開くよう依頼するAPI
+      openInExplorer: (path: string) =>
+        ipcRenderer.invoke('open-in-explorer', path)
     })
   } catch (error) {
     console.error(error)

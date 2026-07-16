@@ -5,7 +5,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { spawn, ChildProcess } from 'child_process'
 import * as dgram from 'dgram'
 import * as fs from 'fs'
-import * as net from 'net' // ★ TCP通信用に追加
+import * as net from 'net' 
 
 let engineProcess: ChildProcess | null = null
 let outputBuffer = ''
@@ -14,7 +14,7 @@ let commandResolver: ((value: any) => void) | null = null
 let commandQueue: { command: string, resolve: (val: any) => void }[] = []
 let isProcessing = false
 
-let cmdClient: net.Socket | null = null // ★ CMD用TCPクライアント
+let cmdClient: net.Socket | null = null 
 
 const isPackaged = app.isPackaged;
 const engineExecutable = process.platform === 'win32' ? 'boxing.exe' : 'boxing';
@@ -27,7 +27,6 @@ let currentScriptsDir = isPackaged
   ? join(process.resourcesPath, 'scripts')
   : 'D:\\Rust\\boxing\\scripts';
 
-// ★ TCP 9092 に接続するクライアント関数
 function connectToCmdServer() {
   if (cmdClient) return;
 
@@ -46,7 +45,6 @@ function connectToCmdServer() {
   cmdClient.on('error', () => {
     cmdClient?.destroy();
     cmdClient = null;
-    // エンジンがまだ起動中の場合はリトライ
     if (engineProcess && !engineProcess.killed) {
       setTimeout(connectToCmdServer, 1000);
     }
@@ -135,7 +133,6 @@ function startRustEngine(targetDir: string = currentScriptsDir): void {
       cwd: join(currentScriptsDir, '..')
     })
 
-    // エンジンのTCPサーバー起動を待ってから接続を試みる
     setTimeout(connectToCmdServer, 1000);
 
     engineProcess.on('error', (err) => {
@@ -225,11 +222,15 @@ app.whenReady().then(() => {
     })
   })
 
-  // ★ フロントエンドからのCMD入力をTCPサーバーに送信
   ipcMain.handle('engine:cmd-input', async (_, text: string) => {
     if (cmdClient && !cmdClient.destroyed) {
       cmdClient.write(text + '\n');
     }
+  })
+
+  // ★ 追加: フロントエンドからの依頼を受けてエクスプローラーを開く
+  ipcMain.handle('open-in-explorer', async (_, targetPath: string) => {
+    shell.showItemInFolder(targetPath)
   })
 
   ipcMain.handle('dialog:select-scripts-folder', async () => {

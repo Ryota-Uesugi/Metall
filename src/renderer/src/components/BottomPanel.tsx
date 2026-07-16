@@ -8,8 +8,14 @@ export type FileNode = {
   type: 'folder' | 'file';
   className?: string; // ファイルの場合、アタッチ用のクラス名
   children?: FileNode[];
-  error?: string; // ★追加: エラー内容を保持
+  error?: string; // エラー情報を格納
 };
+
+interface FileContextMenuData {
+  x: number;
+  y: number;
+  node: FileNode;
+}
 
 interface Props {
   state: SystemState;
@@ -29,6 +35,8 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
   const [cmdInput, setCmdInput] = useState<string>('');
 
   const [currentPath, setCurrentPath] = useState<string[]>([]);
+  
+  const [contextMenu, setContextMenu] = useState<FileContextMenuData | null>(null);
 
   useEffect(() => {
     engineService.onCmdOutput((data) => {
@@ -58,14 +66,12 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
     setCmdInput('');
   };
 
-  // ★変更: サーバーから送られてくる fileTree データを優先し、未実装の時は既存のフラットリストを使う
   const fileTree: FileNode[] = useMemo(() => {
     const s = state as any;
     if (s.fileTree && Array.isArray(s.fileTree)) {
       return s.fileTree;
     }
     
-    // フォールバック（エンジン側が未改修のときの動作）
     const classes = Object.keys(state.blueprint.classes || {});
     return classes.map(cls => ({
       name: `${cls}.boxy`,
@@ -74,7 +80,6 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
     }));
   }, [state]);
 
-  // 現在のパスの中身（フォルダ内）を取得するロジック
   const currentFolderContents = useMemo(() => {
     let current: FileNode[] = fileTree;
     for (const folderName of currentPath) {
@@ -98,6 +103,52 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
 
   const handleNavigateBreadcrumb = (index: number) => {
     setCurrentPath(prev => prev.slice(0, index + 1));
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, node: FileNode) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, node });
+  };
+
+  // ★変更: メインプロセスに依頼してエクスプローラーを開く
+  const handleRevealInExplorer = async () => {
+    if (!contextMenu) return;
+    const node = contextMenu.node;
+    setContextMenu(null);
+
+    try {
+      const rootFolder = await engineService.getScriptsFolder();
+      if (!rootFolder) {
+        alert("Script folder path is not available.");
+        return;
+      }
+
+      const separator = rootFolder.includes('\\') ? '\\' : '/';
+      let targetPath = rootFolder;
+      
+      // 現在のフォルダパスを結合
+      if (currentPath.length > 0) {
+        targetPath += separator + currentPath.join(separator);
+      }
+
+      // ファイル上で右クリックした場合は、そのファイルまでのフルパスにする
+      if (node.type === 'file') {
+        targetPath += separator + node.name;
+      }
+
+      // preload.tsで公開した engineAPI.openInExplorer を呼び出す
+      const api = (window as any).engineAPI;
+      if (api && api.openInExplorer) {
+        await api.openInExplorer(targetPath);
+      } else {
+        alert("メインプロセス側のAPI (openInExplorer) が見つかりません。\npreload.ts などの設定を確認してください。");
+      }
+      
+    } catch (e: any) {
+      console.warn("Failed to open explorer:", e);
+      alert(`Error: ${e.message}`);
+    }
   };
 
   const tabStyle = (tab: 'files' | 'traces' | 'cmd'): React.CSSProperties => ({
@@ -135,7 +186,7 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
   if (isCollapsed) return (<div style={{ height: '35px', backgroundColor: '#2d2d2d', borderTop: '1px solid #1e1e1e', display: 'flex', alignItems: 'center', padding: '0 16px', cursor: 'pointer' }} onClick={onToggle}><span style={{ fontSize: '0.85rem', color: '#cccccc', textTransform: 'uppercase', letterSpacing: '1px' }}>▲ Show Terminal & Project</span></div>);
 
   return (
-    <div style={{ height: `${height}px`, backgroundColor: '#252526', display: 'flex', flexDirection: 'column', borderTop: '1px solid #1e1e1e' }}>
+    <div style={{ height: `${height}px`, backgroundColor: '#252526', display: 'flex', flexDirection: 'column', borderTop: '1px solid #1e1e1e', position: 'relative' }} onClick={() => setContextMenu(null)}>
       <div style={{ display: 'flex', backgroundColor: '#2d2d2d', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex' }}>
           <div style={tabStyle('files')} onClick={() => setActiveTab('files')}>📁 Project</div>
@@ -147,11 +198,9 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
 
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', backgroundColor: '#1e1e1e' }}>
         
-        {/* エクスプローラ風のファイルシステム表示 */}
         {activeTab === 'files' && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             
-            {/* アドレスバー（パンくずリスト） */}
             <div style={{ padding: '6px 12px', backgroundColor: '#252526', borderBottom: '1px solid #3c3c3c', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
               <button 
                 onClick={handleNavigateUp} 
@@ -186,16 +235,15 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
               </div>
             </div>
 
-            {/* ファイル/フォルダのグリッド一覧 */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexWrap: 'wrap', gap: '12px', alignContent: 'flex-start' }}>
               {currentFolderContents.map((node, idx) => {
                 
-                // フォルダの描画
                 if (node.type === 'folder') {
                   return (
                     <div 
                       key={`folder-${node.name}-${idx}`} 
                       onClick={() => handleNavigateDown(node.name)}
+                      onContextMenu={(e) => handleContextMenu(e, node)}
                       style={{ width: '70px', textAlign: 'center', cursor: 'pointer', padding: '8px 4px', backgroundColor: 'transparent', borderRadius: '6px', transition: 'background-color 0.1s', userSelect: 'none' }} 
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = '#2a2d2e'} 
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -209,7 +257,6 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
                   );
                 }
 
-                // ★ファイルの描画（エラーがあれば赤くハイライトしてドラッグを禁止）
                 const isError = !!node.error;
                 return (
                   <div 
@@ -218,6 +265,7 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
                     onDragStart={(e) => { 
                       if (!isError && node.className) e.dataTransfer.setData('boxy-component', node.className); 
                     }}
+                    onContextMenu={(e) => handleContextMenu(e, node)}
                     style={{ 
                       width: '70px', textAlign: 'center', 
                       cursor: isError ? 'not-allowed' : (node.className ? 'grab' : 'default'), 
@@ -245,7 +293,6 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
           </div>
         )}
 
-        {/* CMD(TCP)出力用のターミナル画面 */}
         {activeTab === 'cmd' && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', color: '#cccccc', fontFamily: '"Consolas", "Courier New", monospace', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
@@ -266,7 +313,6 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
           </div>
         )}
 
-        {/* トレース（Execution Traces） */}
         {activeTab === 'traces' && (
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', color: '#cccccc', fontFamily: '"Consolas", "Courier New", monospace', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
             {liveTraces.length > 0 ? (
@@ -285,6 +331,21 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
           </div>
         )}
       </div>
+
+      {contextMenu && (
+        <div 
+          style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, backgroundColor: '#333', border: '1px solid #555', borderRadius: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', zIndex: 1000, padding: '4px 0', minWidth: '180px' }}
+        >
+          <div 
+            onClick={handleRevealInExplorer} 
+            style={{ padding: '8px 16px', cursor: 'pointer', fontSize: '0.85rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }} 
+            onMouseOver={e => e.currentTarget.style.backgroundColor = '#0e639c'} 
+            onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <span>📁</span> Reveal in Explorer
+          </div>
+        </div>
+      )}
     </div>
   );
 };
