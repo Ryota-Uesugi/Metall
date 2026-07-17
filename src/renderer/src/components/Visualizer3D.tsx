@@ -10,7 +10,7 @@ const layoutManager = new LayoutManager();
 
 type FlowActivity =
   | { id: number; type: 'internal'; label: string; entityId: string; targetClass?: string; targetMethod?: string; color: string; }
-  | { id: number; type: 'external'; label: string; sourceEntityId: string; targetEntityId: string; targetClass?: string; targetMethod?: string; color: string; };
+  | { id: number; type: 'external'; label: string; sourceEntityId: string; sourceClass?: string; sourceMethod?: string; targetEntityId: string; targetClass?: string; targetMethod?: string; color: string; };
 
 interface Props {
   state: SystemState;
@@ -20,13 +20,20 @@ interface Props {
   bottomMargin: number;
 }
 
+type StackFrame = {
+  entityId: string;
+  compName?: string;
+  methodName?: string;
+};
+
 export const Visualizer3D: React.FC<Props> = ({ state, liveTraces, rightMargin }) => {
   const [activities, setActivities] = useState<FlowActivity[]>([]);
 
   const flowIdCounter = useRef(0);
   const processedCount = useRef(0);
-  const lastActiveEntity = useRef<string | null>(null);
-  const callStack = useRef<string[]>([]);
+  
+  const lastActiveFrame = useRef<StackFrame | null>(null);
+  const callStack = useRef<(StackFrame | null)[]>([]);
 
   useMemo(() => {
     layoutManager.computeLayout(state.entities, state.blueprint);
@@ -40,7 +47,7 @@ export const Visualizer3D: React.FC<Props> = ({ state, liveTraces, rightMargin }
     if (liveTraces.length === 0) {
       processedCount.current = 0;
       setActivities([]);
-      lastActiveEntity.current = null;
+      lastActiveFrame.current = null;
       callStack.current = [];
       return;
     }
@@ -50,8 +57,8 @@ export const Visualizer3D: React.FC<Props> = ({ state, liveTraces, rightMargin }
     const newTraces = liveTraces.slice(processedCount.current);
     processedCount.current = liveTraces.length;
 
-    const addExternalFlow = (label: string, sourceEntityId: string, targetEntityId: string, targetClass: string | undefined, targetMethod: string | undefined, color: string) => {
-      setActivities(prev => [...prev, { id: flowIdCounter.current++, type: 'external', label, sourceEntityId, targetEntityId, targetClass, targetMethod, color }]);
+    const addExternalFlow = (label: string, sourceEntityId: string, sourceClass: string | undefined, sourceMethod: string | undefined, targetEntityId: string, targetClass: string | undefined, targetMethod: string | undefined, color: string) => {
+      setActivities(prev => [...prev, { id: flowIdCounter.current++, type: 'external', label, sourceEntityId, sourceClass, sourceMethod, targetEntityId, targetClass, targetMethod, color }]);
     };
 
     const addInternalFlash = (label: string, entityId: string, targetClass: string | undefined, targetMethod: string | undefined, color: string) => {
@@ -65,78 +72,75 @@ export const Visualizer3D: React.FC<Props> = ({ state, liveTraces, rightMargin }
 
         if (action === 'NEW' || action === 'DESTROY') return;
 
-        let targetEntityId: string | null = null;
-        let targetClass: string | undefined = undefined;
-        let targetMethod: string | undefined = undefined;
-        let isReturn = false;
-        let isQuery = false;
-
-        if (action === 'ENTRY') {
-          const parts = trace.target.split('@');
-          if (parts.length > 1) {
-            targetMethod = parts[0];
-            targetEntityId = parts[1];
-            if (!lastActiveEntity.current) { lastActiveEntity.current = targetEntityId; }
-            callStack.current = [];
-          }
-        } else if (action === 'RECEIVER') {
-          targetEntityId = trace.value;
-          const dotSplit = trace.target.split('.');
-          if (dotSplit.length > 1) {
-            targetMethod = dotSplit[1];
-            targetClass = dotSplit[0].split('#')[0];
-          } else {
-            targetClass = trace.target.split('#')[0];
-          }
-        } else if (action === 'RETURN' || action === 'THROW') {
-          const parts = trace.target.split('@');
-          if (parts.length > 1) {
-            targetMethod = parts[0];
-          } else {
-            const dotSplit = trace.target.split('.');
-            if (dotSplit.length > 1) {
-               targetMethod = dotSplit[1];
-               targetClass = dotSplit[0].split('#')[0];
-            }
-          }
-          isReturn = true;
-        } else if (action === 'GET_PARENT' || action === 'GET_CHILD') {
-          targetClass = trace.target;
-          targetEntityId = trace.value.split(' -> ')[0];
-          isQuery = true;
+        if (action === 'TASK_END') {
+          lastActiveFrame.current = null;
+          callStack.current = [];
+          return;
         }
 
-        const sourceEntityId = lastActiveEntity.current;
+        const sourceFrame = lastActiveFrame.current;
 
-        if (action === 'RECEIVER' && targetEntityId) {
-          callStack.current.push(sourceEntityId || targetEntityId);
-          const methodLabel = targetMethod || targetClass || 'Method';
-          if (sourceEntityId && sourceEntityId !== targetEntityId) {
-            addExternalFlow(`➔ CALL ${methodLabel}`, sourceEntityId, targetEntityId, targetClass, targetMethod, '#4facfe');
-          } else if (sourceEntityId === targetEntityId) {
-            addInternalFlash(`CALL ${methodLabel}`, targetEntityId, targetClass, targetMethod, '#4facfe');
-          }
-          lastActiveEntity.current = targetEntityId;
-        } else if (isReturn) {
-          const returnTo = callStack.current.pop();
-          if (returnTo) {
-            const shortVal = String(trace.value).replace('Instance(', '').replace('Int(', '').replace('String(', '').replace(')', '');
-            if (sourceEntityId && sourceEntityId !== returnTo) {
-              addExternalFlow(`↩ ${shortVal}`, sourceEntityId, returnTo, undefined, undefined, '#2ecc71');
+        if (action === 'ENTRY') {
+          let targetEntityId: string | null = null;
+          let targetMethod: string | undefined = undefined;
+          let targetClass: string | undefined = undefined;
+
+          const parts = trace.target.split('@');
+          if (parts.length > 1) {
+            targetEntityId = parts[1];
+            const methodParts = parts[0].split('::');
+            if (methodParts.length > 1) {
+              targetClass = methodParts[0];
+              targetMethod = methodParts[1];
             } else {
-              addInternalFlash(`↩ ${shortVal}`, returnTo, undefined, targetMethod, '#2ecc71');
+              targetMethod = parts[0];
             }
-            lastActiveEntity.current = returnTo;
           }
-        } else if (isQuery && targetEntityId) {
-          if (sourceEntityId && sourceEntityId !== targetEntityId) {
-            addExternalFlow(`🔍 ${action}`, sourceEntityId, targetEntityId, undefined, undefined, '#e1b12c');
-          } else if (sourceEntityId) {
-            addInternalFlash(`🔍 ${action}`, sourceEntityId, undefined, undefined, '#e1b12c');
+
+          if (targetEntityId) {
+            const newFrame: StackFrame = { entityId: targetEntityId, compName: targetClass, methodName: targetMethod };
+            const methodLabel = targetMethod || 'Method';
+
+            if (sourceFrame && sourceFrame.entityId !== targetEntityId) {
+              addExternalFlow(`➔ ${methodLabel}`, 
+                sourceFrame.entityId, sourceFrame.compName, sourceFrame.methodName, 
+                targetEntityId, targetClass, targetMethod, '#4facfe');
+            } else {
+              addInternalFlash(`CALL ${methodLabel}`, targetEntityId, targetClass, targetMethod, '#4facfe');
+            }
+            
+            callStack.current.push(sourceFrame);
+            lastActiveFrame.current = newFrame;
           }
-        } else if (action.startsWith('READ_') || action.startsWith('SET_') || action === 'BIND_ARG' || action === 'IF_COND' || action === 'STATE_TRANSITION' || action === 'STATE_EVENT' || action === 'ERROR') {
-          const entityId = lastActiveEntity.current;
-          if (entityId) {
+        } else if (action === 'RETURN' || action === 'THROW') {
+          // ★修正: 使われていなかった targetMethod, targetClass のパース処理をごっそり削除しました
+          
+          const returnToFrame = callStack.current.pop() || null;
+          const currentFrame = lastActiveFrame.current;
+
+          if (returnToFrame) {
+            const shortVal = String(trace.value).replace('Instance(', '').replace('Int(', '').replace('String(', '').replace(')', '');
+
+            if (currentFrame && currentFrame.entityId !== returnToFrame.entityId) {
+              addExternalFlow(`↩ ${shortVal}`, 
+                currentFrame.entityId, currentFrame.compName, currentFrame.methodName, 
+                returnToFrame.entityId, returnToFrame.compName, returnToFrame.methodName, '#2ecc71');
+            } else {
+              addInternalFlash(`↩ ${shortVal}`, returnToFrame.entityId, returnToFrame.compName, returnToFrame.methodName, '#2ecc71');
+            }
+            lastActiveFrame.current = returnToFrame;
+          } else {
+            lastActiveFrame.current = null;
+          }
+        } else if (action === 'GET_PARENT' || action === 'GET_CHILD') {
+          const targetEntityId = trace.value.split(' -> ')[0];
+          if (sourceFrame && sourceFrame.entityId !== targetEntityId) {
+            addExternalFlow(`🔍 ${action}`, 
+              sourceFrame.entityId, sourceFrame.compName, sourceFrame.methodName, 
+              targetEntityId, undefined, undefined, '#e1b12c');
+          }
+        } else if (['SET_LOCAL', 'SET_FIELD', 'IF_COND', 'STATE_TRANSITION', 'STATE_EVENT', 'ERROR'].includes(action)) {
+          if (sourceFrame) {
             let color = '#a29bfe';
             if (action.startsWith('SET_')) color = '#f39c12';
             if (action === 'IF_COND') color = '#ffeaa7';
@@ -147,7 +151,7 @@ export const Visualizer3D: React.FC<Props> = ({ state, liveTraces, rightMargin }
             const shortTarget = trace.target?.includes(':') ? trace.target.split(':')[1] : trace.target;
             const shortLabel = `${action.split('_')[0]} ${shortTarget}`;
             
-            addInternalFlash(shortLabel, entityId, undefined, undefined, color);
+            addInternalFlash(shortLabel, sourceFrame.entityId, sourceFrame.compName, sourceFrame.methodName, color);
           }
         }
       } catch (e) {}
@@ -177,8 +181,9 @@ export const Visualizer3D: React.FC<Props> = ({ state, liveTraces, rightMargin }
             return <InternalFlash key={act.id} pos={info.pos} size={info.size} height={info.height} label={act.label} color={act.color} onComplete={() => removeActivity(act.id)} />;
           }
 
-          const sourceInfo = layoutManager.getComponentEffectInfo(act.sourceEntityId, undefined, undefined, state.blueprint, state.entities);
+          const sourceInfo = layoutManager.getComponentEffectInfo(act.sourceEntityId, act.sourceClass, act.sourceMethod, state.blueprint, state.entities);
           const targetInfo = layoutManager.getComponentEffectInfo(act.targetEntityId, act.targetClass, act.targetMethod, state.blueprint, state.entities);
+          
           if (!sourceInfo || !targetInfo) return null;
           
           return <ExternalFlow key={act.id} startPos={sourceInfo.pos} endPos={targetInfo.pos} label={act.label} color={act.color} onComplete={() => removeActivity(act.id)} />;

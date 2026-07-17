@@ -46,7 +46,6 @@ export const getBuildingLayoutInfo = (entity: EntityData, blueprint: SystemBluep
     return { componentsInfo, maxCompSizeX };
 };
 
-// ★追加: 土地の奥端からコンポーネントを配置するための基準Z座標を計算する
 export const getBuildingBaseZ = (landDepth: number, layoutInfo: any) => {
     const margin = 2.0;
     if (!layoutInfo.componentsInfo || layoutInfo.componentsInfo.length === 0) return -landDepth / 2 + margin;
@@ -66,7 +65,6 @@ export class LayoutManager {
     const roots = Object.values(entities).filter(e => !e.parentId);
     const sizes = new Map<string, { width: number; depth: number }>();
 
-    // ★変更: 土地の幅と奥行きを動的に計算する
     const computeSize = (entId: string): { width: number; depth: number } => {
       const ent = entities[entId];
       if (!ent) return { width: 6, depth: 6 };
@@ -78,7 +76,6 @@ export class LayoutManager {
       if (layoutInfo.componentsInfo.length > 0) {
          const first = layoutInfo.componentsInfo[0];
          const last = layoutInfo.componentsInfo[layoutInfo.componentsInfo.length - 1];
-         // 先頭の手前端から最後尾の奥端までの総奥行き
          compTotalDepth = (first.size / 2) - (last.zOffset - last.size / 2);
       } else {
          compTotalDepth = 2.0;
@@ -111,7 +108,6 @@ export class LayoutManager {
       const gridDepth = rows * maxChildDepth + (rows - 1) * padding;
 
       const finalWidth = Math.max(maxCompSizeX, gridWidth) + margin * 2;
-      // 奥行きは [奥のコンポーネント群] + [パディング] + [手前の子要素グリッド] + [両端マージン]
       const finalDepth = compTotalDepth + padding + gridDepth + margin * 2;
 
       sizes.set(entId, { width: finalWidth, depth: finalDepth });
@@ -149,7 +145,6 @@ export class LayoutManager {
       const compBaseZ = getBuildingBaseZ(size.depth, layoutInfo);
       const firstCompSize = layoutInfo.componentsInfo.length > 0 ? layoutInfo.componentsInfo[0].size : 0;
       
-      // 子要素の開始Z座標（コンポーネント群の最前面＋パディング）
       const compFrontZ = compBaseZ + firstCompSize / 2;
       const childrenStartZ = compFrontZ + padding;
       
@@ -193,11 +188,21 @@ export class LayoutManager {
     if (!ent) return null;
 
     const layoutInfo = getBuildingLayoutInfo(ent, blueprint);
+    if (!layoutInfo.componentsInfo || layoutInfo.componentsInfo.length === 0) return null;
     
-    const compInfo = compName 
-        ? layoutInfo.componentsInfo.find(c => c.name === compName) || layoutInfo.componentsInfo[0]
-        : layoutInfo.componentsInfo[0];
-    if (!compInfo) return null;
+    // ★追加: 実行されたメソッド名から、それが定義されているコンポーネントを賢く特定する
+    let compInfo = compName 
+        ? layoutInfo.componentsInfo.find(c => c.name === compName)
+        : undefined;
+
+    if (!compInfo && methodName) {
+        compInfo = layoutInfo.componentsInfo.find(c => c.floors.some(f => f.name === methodName));
+    }
+    
+    // 見つからなければメインコンポーネント（0番目）をデフォルトにする
+    if (!compInfo) {
+        compInfo = layoutInfo.componentsInfo[0];
+    }
 
     const floorInfo = methodName 
         ? compInfo.floors.find(f => f.name === methodName) || compInfo.floors[0]

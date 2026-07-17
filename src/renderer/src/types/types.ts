@@ -2,6 +2,7 @@
 export interface MethodData {
   name: string;
   args: string[];
+  visibility?: 'Public' | 'Private';
 }
 
 export interface ClassBlueprint {

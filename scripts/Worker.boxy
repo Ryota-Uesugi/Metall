@@ -1,0 +1,40 @@
+dependency Worker {
+    requires PowerCore;
+}
+
+class Worker {
+    string workerName = "Test-Bot";
+
+    fn initialize() {
+        global.log("🤖 Workerが初期化されました！(PowerCoreも同時に積まれているはずです)");
+    }
+
+    public fn startWork() {
+        global.log("🤖 Worker: 仕事を開始します！");
+        this.transition("Worker::Active"); // ★ここを修正
+    }
+
+    public fn stopWork() {
+        global.log("🤖 Worker: 仕事を停止します。");
+        this.transition("Worker::Idle"); // ★ここを修正
+    }
+
+    public fn spawnHelper() {
+        global.log("🚁 Worker: サポートドローンを出撃させます！");
+        this.attach("helper1", "Drone");
+    }
+}
+
+state Worker {
+    // 📌 遷移先リストを明記する
+    default Idle : [Active] {
+        onEnter() => {
+            global.log("💤 [State] Workerは待機中です。");
+        }
+    }
+    Active : [Idle] {
+        onEnter() => {
+            global.log("⚙️ [State] Workerが元気に稼働中です！");
+        }
+    }
+}

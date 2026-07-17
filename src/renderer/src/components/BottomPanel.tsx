@@ -1,20 +1,23 @@
 // src/components/BottomPanel.tsx
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, JSX } from 'react';
 import { SystemState } from '../types/types';
 import { engineService } from '../services/engineService';
 
 export type FileNode = {
   name: string;
   type: 'folder' | 'file';
-  className?: string; // ファイルの場合、アタッチ用のクラス名
+  className?: string;
   children?: FileNode[];
-  error?: string; // エラー情報を格納
+  error?: string;
 };
 
-interface FileContextMenuData {
+type ContextMenuType = 'file' | 'traces' | 'cmd';
+
+interface ContextMenuData {
   x: number;
   y: number;
-  node: FileNode;
+  type: ContextMenuType;
+  node?: FileNode;
 }
 
 interface Props {
@@ -24,9 +27,20 @@ interface Props {
   height: number;
   isCollapsed: boolean;
   onToggle: () => void;
+  showTraceLines: boolean;
 }
 
-export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, height, isCollapsed, onToggle }) => {
+const globalStyle = `
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+`;
+
+export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, height, isCollapsed, onToggle, showTraceLines }) => {
   const [activeTab, setActiveTab] = useState<'files' | 'traces' | 'cmd'>('files');
   const traceEndRef = useRef<HTMLDivElement>(null);
   const cmdEndRef = useRef<HTMLDivElement>(null);
@@ -35,12 +49,20 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
   const [cmdInput, setCmdInput] = useState<string>('');
 
   const [currentPath, setCurrentPath] = useState<string[]>([]);
-  
-  const [contextMenu, setContextMenu] = useState<FileContextMenuData | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuData | null>(null);
+
+  const [traceOffset, setTraceOffset] = useState<number>(0);
 
   useEffect(() => {
     engineService.onCmdOutput((data) => {
-      setCmdOutput(prev => prev + data);
+      setCmdOutput(prev => {
+        const next = prev + data;
+        // ★安全装置：ログが1万文字を超えたら古いものを切り捨ててフリーズを防ぐ[cite: 10]
+        if (next.length > 10000) {
+          return next.slice(-10000);
+        }
+        return next;
+      });
     });
   }, []);
 
@@ -52,16 +74,26 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
 
   useEffect(() => {
     if (activeTab === 'traces' || isExecuting) {
-      traceEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      traceEndRef.current?.scrollIntoView({ behavior: 'auto' });
     }
     if (activeTab === 'cmd' || isExecuting) {
-      cmdEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      cmdEndRef.current?.scrollIntoView({ behavior: 'auto' });
     }
   }, [liveTraces.length, cmdOutput, isExecuting, activeTab]);
 
+  useEffect(() => {
+    if (liveTraces.length < traceOffset) {
+      setTraceOffset(0);
+    }
+  }, [liveTraces.length, traceOffset]);
+
   const handleCmdSubmit = async () => {
     if (!cmdInput) return;
-    setCmdOutput(prev => prev + '> ' + cmdInput + '\n');
+    setCmdOutput(prev => {
+      const next = prev + '> ' + cmdInput + '\n';
+      // ★送信時も同様に制限をかける
+      return next.length > 10000 ? next.slice(-10000) : next;
+    });
     await engineService.sendCmdInput(cmdInput);
     setCmdInput('');
   };
@@ -108,12 +140,11 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
   const handleContextMenu = (e: React.MouseEvent, node: FileNode) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, node });
+    setContextMenu({ x: e.clientX, y: e.clientY, type: 'file', node });
   };
 
-  // ★変更: メインプロセスに依頼してエクスプローラーを開く
   const handleRevealInExplorer = async () => {
-    if (!contextMenu) return;
+    if (!contextMenu || contextMenu.type !== 'file' || !contextMenu.node) return;
     const node = contextMenu.node;
     setContextMenu(null);
 
@@ -127,17 +158,13 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
       const separator = rootFolder.includes('\\') ? '\\' : '/';
       let targetPath = rootFolder;
       
-      // 現在のフォルダパスを結合
       if (currentPath.length > 0) {
         targetPath += separator + currentPath.join(separator);
       }
-
-      // ファイル上で右クリックした場合は、そのファイルまでのフルパスにする
       if (node.type === 'file') {
         targetPath += separator + node.name;
       }
 
-      // preload.tsで公開した engineAPI.openInExplorer を呼び出す
       const api = (window as any).engineAPI;
       if (api && api.openInExplorer) {
         await api.openInExplorer(targetPath);
@@ -151,15 +178,63 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
     }
   };
 
+  const handleClearTraces = () => {
+    setTraceOffset(liveTraces.length);
+    setContextMenu(null);
+  };
+
+  const handleClearCmd = () => {
+    setCmdOutput('');
+    setContextMenu(null);
+  };
+
   const tabStyle = (tab: 'files' | 'traces' | 'cmd'): React.CSSProperties => ({
     padding: '8px 20px', cursor: 'pointer', backgroundColor: activeTab === tab ? '#1e1e1e' : 'transparent', color: activeTab === tab ? '#ffffff' : '#808080', borderTop: activeTab === tab ? '1px solid #00a8ff' : '1px solid transparent', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '6px'
   });
 
-  const formatTrace = (traceStr: string) => {
-    try {
-      const t = JSON.parse(traceStr);
-      let color = '#cccccc'; let icon = '🔹'; let bgColor = 'transparent';
+  const renderTraces = () => {
+    // ★安全装置：トレースが多すぎる場合、直近の1000件だけを描画してフリーズを防ぐ
+    let visibleTraces = liveTraces.slice(traceOffset);
+    if (visibleTraces.length > 1000) {
+      visibleTraces = visibleTraces.slice(-1000);
+    }
+    
+    if (visibleTraces.length === 0) {
+      return (
+        <span style={{ color: '#808080', fontStyle: 'italic' }}>
+          {isExecuting ? '⏳ Executing...' : 'Waiting for connection on UDP 9090...'}
+        </span>
+      );
+    }
 
+    let currentDepth = 0;
+
+    return visibleTraces.map((traceStr, idx) => {
+      let t: any = null;
+      try {
+        t = JSON.parse(traceStr);
+      } catch (e) {
+        return <div key={idx}>{traceStr}</div>;
+      }
+
+      const isReturn = t.action === 'RETURN' || t.action === 'THROW';
+      const isCall = t.action === 'ENTRY' || t.action === 'CALL';
+      const isTaskEnd = t.action === 'TASK_END';
+
+      if (isReturn) {
+        currentDepth = Math.max(0, currentDepth - 1);
+      }
+      if (isTaskEnd) {
+        currentDepth = 0;
+      }
+
+      const depthToUse = currentDepth;
+
+      if (isCall) {
+        currentDepth += 1;
+      }
+
+      let color = '#cccccc'; let icon = '🔹'; let bgColor = 'transparent';
       switch (t.action) {
         case 'CALL': color = '#4facfe'; icon = '▶️'; break;
         case 'RETURN': color = '#2ecc71'; icon = '✅'; break;
@@ -175,19 +250,43 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
         case 'IF_COND': color = '#ffeaa7'; icon = '🔀'; break;
         case 'STATE_TRANSITION': color = '#9b59b6'; icon = '🔄'; break;
         case 'STATE_EVENT': color = '#8e44ad'; icon = '⚡'; break;
+        case 'TASK_END': color = '#e84393'; icon = '🏁'; break;
         default: break;
       }
-      return `<div style="background-color:${bgColor}; padding: 2px 4px; border-radius: 2px;"><span style="color:${color}">${icon} [${t.action}] <b>${t.target}</b> ${t.value ? `=> <span style="color:#ce9178">${t.value}</span>` : ''}</span></div>`;
-    } catch (e) {
-      return `<div>${traceStr}</div>`;
-    }
+
+      const indentLines: JSX.Element[] = [];
+      if (showTraceLines) {
+        for (let i = 0; i < depthToUse; i++) {
+          indentLines.push(
+            <div key={i} style={{ width: '16px', borderLeft: '1px dashed #555', height: '100%' }} />
+          );
+        }
+      }
+
+      return (
+        <div key={idx} style={{ display: 'flex', alignItems: 'stretch', marginBottom: '2px', minHeight: '22px' }}>
+          {showTraceLines && (
+            <div style={{ display: 'flex', marginTop: '4px' }}>
+              {indentLines}
+            </div>
+          )}
+          <div style={{ backgroundColor: bgColor, padding: '2px 4px', borderRadius: '2px', display: 'flex', flex: 1, alignItems: 'center' }}>
+            <span style={{ color }}>
+              {icon} [{t.action}] <b>{t.target}</b> {t.value ? <span style={{ color: '#ce9178' }}>=&gt; {t.value}</span> : ''}
+            </span>
+          </div>
+        </div>
+      );
+    });
   };
 
   if (isCollapsed) return (<div style={{ height: '35px', backgroundColor: '#2d2d2d', borderTop: '1px solid #1e1e1e', display: 'flex', alignItems: 'center', padding: '0 16px', cursor: 'pointer' }} onClick={onToggle}><span style={{ fontSize: '0.85rem', color: '#cccccc', textTransform: 'uppercase', letterSpacing: '1px' }}>▲ Show Terminal & Project</span></div>);
 
   return (
-    <div style={{ height: `${height}px`, backgroundColor: '#252526', display: 'flex', flexDirection: 'column', borderTop: '1px solid #1e1e1e', position: 'relative' }} onClick={() => setContextMenu(null)}>
-      <div style={{ display: 'flex', backgroundColor: '#2d2d2d', justifyContent: 'space-between' }}>
+    <div style={{ height: `${height}px`, backgroundColor: '#252526', display: 'flex', flexDirection: 'column', borderTop: '1px solid #1e1e1e', position: 'relative', minHeight: 0 }} onClick={() => setContextMenu(null)}>
+      <style>{globalStyle}</style>
+      
+      <div style={{ display: 'flex', backgroundColor: '#2d2d2d', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex' }}>
           <div style={tabStyle('files')} onClick={() => setActiveTab('files')}>📁 Project</div>
           <div style={tabStyle('cmd')} onClick={() => setActiveTab('cmd')}>📟 CMD Terminal</div>
@@ -196,10 +295,10 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
         <div style={{ padding: '8px 16px', cursor: 'pointer', color: '#808080', fontSize: '0.8rem' }} onClick={onToggle}>▼ Collapse</div>
       </div>
 
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', backgroundColor: '#1e1e1e' }}>
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', backgroundColor: '#1e1e1e', minHeight: 0 }}>
         
         {activeTab === 'files' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             
             <div style={{ padding: '6px 12px', backgroundColor: '#252526', borderBottom: '1px solid #3c3c3c', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
               <button 
@@ -235,7 +334,7 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
               </div>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexWrap: 'wrap', gap: '12px', alignContent: 'flex-start' }}>
+            <div className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '16px', display: 'flex', flexWrap: 'wrap', gap: '12px', alignContent: 'flex-start' }}>
               {currentFolderContents.map((node, idx) => {
                 
                 if (node.type === 'folder') {
@@ -294,8 +393,12 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
         )}
 
         {activeTab === 'cmd' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', color: '#cccccc', fontFamily: '"Consolas", "Courier New", monospace', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <div 
+              className="hide-scrollbar" 
+              style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '12px 16px', color: '#cccccc', fontFamily: '"Consolas", "Courier New", monospace', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}
+              onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, type: 'cmd' }); }}
+            >
               {cmdOutput || <span style={{ color: '#808080', fontStyle: 'italic' }}>Waiting for CMD output on port 9092...</span>}
               <div ref={cmdEndRef} />
             </div>
@@ -314,20 +417,19 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
         )}
 
         {activeTab === 'traces' && (
-          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', color: '#cccccc', fontFamily: '"Consolas", "Courier New", monospace', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
-            {liveTraces.length > 0 ? (
-              liveTraces.map((trace, idx) => (
-                <div key={idx} dangerouslySetInnerHTML={{ __html: formatTrace(trace) }} />
-              ))
-            ) : (
-              <span style={{ color: '#808080', fontStyle: 'italic' }}>
-                {isExecuting ? '⏳ Executing...' : 'Waiting for connection on UDP 9090...'}
-              </span>
-            )}
-            {liveTraces.length > 0 && !isExecuting && (
-              <div style={{ marginTop: '8px', color: '#f39c12', fontWeight: 'bold' }}>🏁 Execution Finished. Data updated.</div>
-            )}
-            <div ref={traceEndRef} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <div 
+              className="hide-scrollbar" 
+              style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '12px 16px', color: '#cccccc', fontFamily: '"Consolas", "Courier New", monospace', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}
+              onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, type: 'traces' }); }}
+            >
+              {renderTraces()}
+              
+              {(liveTraces.length - traceOffset) > 0 && !isExecuting && (
+                <div style={{ marginTop: '8px', color: '#f39c12', fontWeight: 'bold' }}>🏁 Execution Finished. Data updated.</div>
+              )}
+              <div ref={traceEndRef} />
+            </div>
           </div>
         )}
       </div>
@@ -336,14 +438,38 @@ export const BottomPanel: React.FC<Props> = ({ state, liveTraces, isExecuting, h
         <div 
           style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, backgroundColor: '#333', border: '1px solid #555', borderRadius: '4px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', zIndex: 1000, padding: '4px 0', minWidth: '180px' }}
         >
-          <div 
-            onClick={handleRevealInExplorer} 
-            style={{ padding: '8px 16px', cursor: 'pointer', fontSize: '0.85rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }} 
-            onMouseOver={e => e.currentTarget.style.backgroundColor = '#0e639c'} 
-            onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
-          >
-            <span>📁</span> Reveal in Explorer
-          </div>
+          {contextMenu.type === 'file' && (
+            <div 
+              onClick={handleRevealInExplorer} 
+              style={{ padding: '8px 16px', cursor: 'pointer', fontSize: '0.85rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }} 
+              onMouseOver={e => e.currentTarget.style.backgroundColor = '#0e639c'} 
+              onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <span>📁</span> Reveal in Explorer
+            </div>
+          )}
+          
+          {contextMenu.type === 'traces' && (
+            <div 
+              onClick={handleClearTraces} 
+              style={{ padding: '8px 16px', cursor: 'pointer', fontSize: '0.85rem', color: '#ff7675', display: 'flex', alignItems: 'center', gap: '8px' }} 
+              onMouseOver={e => e.currentTarget.style.backgroundColor = '#0e639c'} 
+              onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <span>🗑️</span> Clear Traces
+            </div>
+          )}
+
+          {contextMenu.type === 'cmd' && (
+            <div 
+              onClick={handleClearCmd} 
+              style={{ padding: '8px 16px', cursor: 'pointer', fontSize: '0.85rem', color: '#ff7675', display: 'flex', alignItems: 'center', gap: '8px' }} 
+              onMouseOver={e => e.currentTarget.style.backgroundColor = '#0e639c'} 
+              onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <span>🗑️</span> Clear Terminal
+            </div>
+          )}
         </div>
       )}
     </div>

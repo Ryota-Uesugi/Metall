@@ -1,0 +1,21 @@
+dependency Monster {
+    requires Health;
+}
+
+class Monster {
+    private string name = "凶悪なスライム";
+
+    public fn initialize() -> void {
+        this.initHealth(40);
+    }
+
+    public fn getName() -> string {
+        return this.name;
+    }
+
+    public fn attack(instance target) -> void {
+        let dmg = global.random(5, 15);
+        global.log(this.name + " の攻撃！");
+        target.takeDamage(dmg, target.getName());
+    }
+}

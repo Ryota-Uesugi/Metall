@@ -23,6 +23,17 @@ interface Props {
   onToggle: () => void;
 }
 
+// ★追加: スクロールバーを非表示にするグローバルスタイル
+const globalStyle = `
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+`;
+
 const EntityTreeNode: React.FC<{
   entity: EntityData;
   entities: Record<string, EntityData>;
@@ -73,7 +84,6 @@ const EntityTreeNode: React.FC<{
       onUpdate();
     } else if (action === 'child') {
       const defaultName = `${className.toLowerCase()}1`;
-      // ★修正: window.prompt ではなく自作のダイアログ関数を呼び出す
       const name = await askPrompt(`Create child entity in [${entity.id}]\nClass: ${className}\nName:`, defaultName);
       if (name) {
         await engineService.createEntity(name, className, entity.id);
@@ -163,7 +173,6 @@ export const HierarchyPanel: React.FC<Props> = ({ state, selectedId, selectedCom
   const [contextMenu, setContextMenu] = useState<ContextMenuData | null>(null);
   const [isDragOverRoot, setIsDragOverRoot] = useState(false);
 
-  // ★追加: 独自ダイアログの状態管理
   const [promptData, setPromptData] = useState<{ msg: string; val: string; resolve: (v: string | null) => void } | null>(null);
   const [confirmData, setConfirmData] = useState<{ msg: string; resolve: (v: boolean) => void } | null>(null);
 
@@ -197,7 +206,6 @@ export const HierarchyPanel: React.FC<Props> = ({ state, selectedId, selectedCom
     if (!className) return;
 
     const defaultName = `${className.toLowerCase()}1`;
-    // ★修正: window.prompt を askPrompt に置き換え
     const name = await askPrompt(`Create new root entity\nClass: ${className}\nName:`, defaultName);
     
     if (name) {
@@ -208,7 +216,6 @@ export const HierarchyPanel: React.FC<Props> = ({ state, selectedId, selectedCom
 
   const handleRename = async () => {
     if (!contextMenu) return;
-    // ★修正: window.prompt を askPrompt に置き換え
     const newName = await askPrompt(`Enter new name for '${contextMenu.entityId}'`, contextMenu.entityId);
     if (newName && newName !== contextMenu.entityId) {
       await engineService.renameEntity(contextMenu.entityId, newName);
@@ -227,7 +234,6 @@ export const HierarchyPanel: React.FC<Props> = ({ state, selectedId, selectedCom
 
   const handleDestroyEntity = async () => {
     if (!contextMenu) return;
-    // ★修正: window.confirm を askConfirm に置き換え
     const ok = await askConfirm(`Destroy entity '${contextMenu.entityId}'?`);
     if (ok) {
       await engineService.destroyEntity(contextMenu.entityId);
@@ -255,7 +261,8 @@ export const HierarchyPanel: React.FC<Props> = ({ state, selectedId, selectedCom
 
   return (
     <>
-      {/* カスタムプロンプトダイアログ */}
+      <style>{globalStyle}</style>
+
       {promptData && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
           <div style={{ backgroundColor: '#252526', padding: '24px', borderRadius: '8px', border: '1px solid #3c3c3c', width: '320px', boxShadow: '0 8px 32px rgba(0,0,0,0.8)' }}>
@@ -279,7 +286,6 @@ export const HierarchyPanel: React.FC<Props> = ({ state, selectedId, selectedCom
         </div>
       )}
 
-      {/* カスタムコンファームダイアログ */}
       {confirmData && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
           <div style={{ backgroundColor: '#252526', padding: '24px', borderRadius: '8px', border: '1px solid #3c3c3c', width: '320px', boxShadow: '0 8px 32px rgba(0,0,0,0.8)' }}>
@@ -292,7 +298,8 @@ export const HierarchyPanel: React.FC<Props> = ({ state, selectedId, selectedCom
         </div>
       )}
 
-      <div style={{ width: `${width}px`, backgroundColor: '#252526', borderRight: '1px solid #1e1e1e', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 1 }} onClick={() => setContextMenu(null)}>
+      {/* ★ minHeight: 0 を追加し、スクロール領域に hide-scrollbar を適用 */}
+      <div style={{ width: `${width}px`, backgroundColor: '#252526', borderRight: '1px solid #1e1e1e', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 1, minHeight: 0 }} onClick={() => setContextMenu(null)}>
         <div style={{ padding: '10px 12px', backgroundColor: '#2d2d2d', fontSize: '0.85rem', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textTransform: 'uppercase', letterSpacing: '1px' }}>
           <span>Hierarchy</span>
           <span onClick={onToggle} style={{ cursor: 'pointer', padding: '0 4px' }}>◀</span>
@@ -302,7 +309,8 @@ export const HierarchyPanel: React.FC<Props> = ({ state, selectedId, selectedCom
           onDragOver={handleRootDragOver}
           onDragLeave={handleRootDragLeave}
           onDrop={handleRootDrop}
-          style={{ flex: 1, overflowY: 'auto', padding: '8px 0', backgroundColor: isDragOverRoot ? 'rgba(255,255,255,0.05)' : 'transparent', transition: 'background-color 0.2s' }}
+          className="hide-scrollbar"
+          style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '8px 0', backgroundColor: isDragOverRoot ? 'rgba(255,255,255,0.05)' : 'transparent', transition: 'background-color 0.2s' }}
         >
           {roots.map(root => (
             <EntityTreeNode key={root.id} entity={root} entities={state.entities} selectedId={selectedId} selectedComponent={selectedComponent} onSelect={onSelect} onUpdate={onUpdate} onContextMenu={setContextMenu} askPrompt={askPrompt} askConfirm={askConfirm} depth={0} />

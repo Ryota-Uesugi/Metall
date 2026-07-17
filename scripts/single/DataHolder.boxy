@@ -1,0 +1,12 @@
+class DataHolder {
+    // 誰でもアクセスできるデータ
+    public string publicData = "公開データです";
+    
+    // 自分しかアクセスできないデータ (private は明記しても省略しても同じ)
+    private string secretData = "誰にも見せられない秘密のデータ";
+
+    public fn readSecretSelf() {
+        // 自分自身なので private なデータも読める
+        global.log("🔐 内部アクセス: " + this.secretData);
+    }
+}

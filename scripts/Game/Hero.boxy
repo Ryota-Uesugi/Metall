@@ -1,0 +1,28 @@
+dependency Hero {
+    requires Health; // 継承の代わりに、Healthコンポーネントをアタッチ
+}
+
+class Hero {
+    private string name = "勇者";
+
+    public fn initialize() -> void {
+        // Healthコンポーネントのメソッドを呼んで初期化
+        this.initHealth(100); 
+    }
+
+    public fn getName() -> string {
+        return this.name;
+    }
+
+    public fn attack(instance target) -> void {
+        let dmg = global.random(10, 20);
+        global.log(this.name + " の攻撃！");
+        // 相手のコンポーネントのメソッドを叩く（カプセル化）
+        target.takeDamage(dmg, target.getName());
+    }
+
+    public fn healSelf() -> void {
+        let amount = global.random(15, 25);
+        this.heal(amount, this.name);
+    }
+}

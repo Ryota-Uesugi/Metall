@@ -1,0 +1,11 @@
+class Jetpack {
+    public int fuel = 50;
+
+    fn initialize() {
+        global.log("🚀 Jetpack: 動的アタッチ成功！飛行準備完了です。");
+    }
+
+    public fn fly() {
+        global.log("🚀 Jetpack: 空を飛んでいます！シュゴォォォ！");
+    }
+}

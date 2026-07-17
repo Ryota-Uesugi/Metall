@@ -1,0 +1,57 @@
+// 生死を管理するステートマシン（このファイル内だけで使われます）
+state HealthState {
+    default Alive: [Dead] {
+        onEnter() => { }
+    }
+    public Dead: [] {
+        onEnter() => { }
+    }
+}
+
+class Health {
+    private int hp = 0;
+    private int maxHp = 0;
+
+    // 初期化メソッド
+    public fn initHealth(int max) -> void {
+        this.maxHp = max;
+        this.hp = max;
+        this.transition("HealthState::Alive");
+    }
+
+    public fn getHp() -> int {
+        return this.hp;
+    }
+
+    public fn isDead() -> bool {
+        // ステートの確認はこのファイル内で完結させる
+        return this.state == "HealthState::Dead";
+    }
+
+    public fn takeDamage(int dmg, string targetName) -> void {
+        if (this.isDead() == true) {
+            return;
+        }
+        
+        this.hp = this.hp - dmg;
+        global.log(targetName + " に " + dmg + " のダメージ！ (残りHP: " + this.hp + ")");
+        
+        if (this.hp <= 0) {
+            this.hp = 0;
+            this.transition("HealthState::Dead"); // ステートを遷移
+            global.log("💀 " + targetName + " は倒れた...");
+        }
+    }
+
+    public fn heal(int amount, string targetName) -> void {
+        if (this.isDead() == true) {
+            return;
+        }
+        
+        this.hp = this.hp + amount;
+        if (this.hp > this.maxHp) {
+            this.hp = this.maxHp;
+        }
+        global.log(targetName + " は回復した！ (残りHP: " + this.hp + ")");
+    }
+}

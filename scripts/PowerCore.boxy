@@ -1,0 +1,12 @@
+class PowerCore {
+    public int energy = 100;
+    
+    fn initialize() {
+        global.log("⚡ PowerCore: 接続完了。エネルギー100%です。");
+    }
+
+    public fn consumeEnergy() {
+        energy = energy - 10;
+        global.log("⚡ PowerCore: エネルギーを消費しました。残り: " + energy);
+    }
+}

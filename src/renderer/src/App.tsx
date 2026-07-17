@@ -45,6 +45,9 @@ const App: React.FC = () => {
   const processedTraceCount = useRef(0);
   const [activeTasks, setActiveTasks] = useState<any[]>([]);
 
+  // ★追加: トレース参照線のON/OFFをApp全体で管理
+  const [showTraceLines, setShowTraceLines] = useState(true);
+
   const fetchState = async () => {
     const newState = await engineService.getState();
     setState(newState);
@@ -81,16 +84,13 @@ const App: React.FC = () => {
     }
   }, [triggerFetchState]);
 
-  // ★変更箇所: 常にポーリングするのではなく、実行中かタスクが残っている時だけ回す
   useEffect(() => {
-    // 実行中でもなく、タスクも無い場合は何もしない（ポーリング停止）
     if (!executingMethod && activeTasks.length === 0) return;
 
     const interval = setInterval(async () => {
       const tasks = await engineService.getTasks();
       setActiveTasks(tasks);
       
-      // 全てのタスクが終了したタイミングで実行状態を解除する
       if (tasks.length === 0 && executingMethod) {
         setExecutingMethod(null);
         triggerFetchState();
@@ -198,7 +198,12 @@ const App: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', margin: 0, overflow: 'hidden', backgroundColor: '#1e1e1e', color: '#cccccc', fontFamily: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif' }}>
-      <Toolbar onUpdate={triggerFetchState} isExecuting={executingMethod !== null} />
+      <Toolbar 
+        onUpdate={triggerFetchState} 
+        isExecuting={executingMethod !== null} 
+        showTraceLines={showTraceLines} 
+        onToggleTraceLines={() => setShowTraceLines(!showTraceLines)} 
+      />
       
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
@@ -241,7 +246,15 @@ const App: React.FC = () => {
 
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', flexDirection: 'column', zIndex: 11, boxShadow: '0 -4px 16px rgba(0,0,0,0.5)' }}>
           {!bottomCollapsed && <div style={resizerStyle('vertical')} onMouseDown={createDragHandler(bottomHeight, setBottomHeight, 'vertical', true)} />}
-          <BottomPanel state={state} liveTraces={liveTraces} isExecuting={executingMethod !== null} height={bottomHeight} isCollapsed={bottomCollapsed} onToggle={() => setBottomCollapsed(!bottomCollapsed)} />
+          <BottomPanel 
+            state={state} 
+            liveTraces={liveTraces} 
+            isExecuting={executingMethod !== null} 
+            height={bottomHeight} 
+            isCollapsed={bottomCollapsed} 
+            onToggle={() => setBottomCollapsed(!bottomCollapsed)} 
+            showTraceLines={showTraceLines} 
+          />
         </div>
       </div>
     </div>

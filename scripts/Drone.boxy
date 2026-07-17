@@ -1,0 +1,11 @@
+class Drone {
+    public string status = "Ready";
+
+    fn initialize() {
+        global.log("🚁 Drone: 起動しました！親機のサポートに入ります。");
+    }
+    
+    public fn report() {
+        global.log("📡 Drone: 周辺に異常はありません！");
+    }
+}

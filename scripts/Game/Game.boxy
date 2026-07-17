@@ -1,0 +1,55 @@
+dependency Game {
+    require_child Hero;
+    require_child Monster;
+}
+
+class Game {
+    public fn initialize() -> void {
+        global.log("======================");
+        global.log(" ⚔️ BATTLE START ⚔️ ");
+        global.log("======================");
+        
+        this.attach("player", "Hero");
+        this.attach("enemy", "Monster");
+        
+        global.log("準備完了。インスペクターから play() を実行してください。");
+    }
+
+    public fn play() -> void {
+        let player = this.getChild("player");
+        let enemy = this.getChild("enemy");
+
+        global.log("野生の " + enemy.getName() + " があらわれた！");
+
+        // 直接 .state を見ず、カプセル化されたメソッドで判定する
+        while (player.isDead() == false && enemy.isDead() == false) {
+            global.log("----------------------");
+            global.log("【あなたのターン】 コマンドを入力 ( attack / heal )");
+            
+            let cmd = global.readLine();
+
+            if (cmd == "attack") {
+                player.attack(enemy);
+            } else {
+                if (cmd == "heal") {
+                    player.healSelf();
+                } else {
+                    global.log("無効なコマンドです。ターンを無駄にしました！");
+                }
+            }
+
+            if (enemy.isDead() == true) {
+                global.log("🎉 勝利しました！");
+                return;
+            }
+
+            global.log("【敵のターン】");
+            enemy.attack(player);
+
+            if (player.isDead() == true) {
+                global.log("💀 GAME OVER...");
+                return;
+            }
+        }
+    }
+}

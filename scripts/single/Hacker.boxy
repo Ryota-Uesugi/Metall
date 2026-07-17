@@ -1,0 +1,33 @@
+class Hacker {
+    public fn runTest() {
+        global.log("💻 ハッキングテストを開始します...");
+        this.attach("target", "DataHolder");
+
+        let target = this.getChild("target");
+
+        // 1. Publicな読み込み (成功する)
+        global.log("✅ Public読み取り: " + target.publicData);
+
+        // 2. Publicな書き込み (成功する)
+        target.publicData = "改ざん完了";
+        global.log("✅ Public書き換え後: " + target.publicData);
+
+        // 3. Privateな読み込み (例外でブロックされる)
+        try {
+            let secret = target.secretData;
+            global.log("❌ 失敗: Privateなデータが読めてしまいました！ -> " + secret);
+        } catch (e) {
+            global.log("✅ 成功: セキュリティが読み取りをブロックしました -> " + e);
+        }
+
+        // 4. Privateな書き込み (例外でブロックされる)
+        try {
+            target.secretData = "データを盗んだぞ！";
+            global.log("❌ 失敗: Privateなデータが書き換えられてしまいました！");
+        } catch (e) {
+            global.log("✅ 成功: セキュリティが書き込みをブロックしました -> " + e);
+        }
+        
+        global.log("💻 テスト終了。");
+    }
+}

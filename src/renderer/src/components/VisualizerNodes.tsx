@@ -14,9 +14,28 @@ export const EntityNode3D: React.FC<{
     const layoutInfo = getBuildingLayoutInfo(entity, blueprint);
     const compBaseZ = getBuildingBaseZ(node.landDepth, layoutInfo);
 
+    const getFloorStyle = (compName: string, methodName: string, isMain: boolean) => {
+        if (methodName === '(No Methods)') {
+            return { boxColor: isMain ? '#2c3e50' : '#4a90e2', textColor: '#666666', icon: '', metalness: isMain ? 0 : 0.5 };
+        }
+
+        if (methodName === 'initialize') {
+            return { boxColor: '#d35400', textColor: '#ffffff', icon: '✨ ', metalness: 0.3 };
+        }
+
+        const cls = blueprint.classes[compName];
+        const methodDef = cls?.methods?.find((m: any) => m.name === methodName) as any;
+        const isPublic = methodDef?.visibility === 'Public';
+
+        if (isPublic) {
+            return { boxColor: isMain ? '#2c3e50' : '#4a90e2', textColor: '#ffffff', icon: '🔓 ', metalness: isMain ? 0 : 0.5 };
+        } else {
+            return { boxColor: '#444444', textColor: '#aaaaaa', icon: '🔒 ', metalness: 0.1 };
+        }
+    };
+
     return (
         <group position={[node.globalPos.x, node.globalPos.y, node.globalPos.z]}>
-            {/* ★修正: 長方形の土地を描画 */}
             <Box args={[node.landWidth, 0.2, node.landDepth]} position={[0, -0.1, 0]}>
                 <meshStandardMaterial color={node.color} roughness={0.6} />
             </Box>
@@ -45,40 +64,43 @@ export const EntityNode3D: React.FC<{
                 🌍 {entity.id}
             </Html>
 
-            {/* コンポーネント群（後ろに並ぶビル群） */}
-            {layoutInfo.componentsInfo.map((comp) => {
-                // 土地の奥端基準(compBaseZ)からコンポーネントを配置する
+            {/* ★変更: インデックスを受け取り、同名コンポーネントが複数ある場合に番号を振る */}
+            {layoutInfo.componentsInfo.map((comp, compIndex) => {
                 const localZ = compBaseZ + comp.zOffset;
                 return (
                     <group key={`${comp.name}-${comp.zOffset}`} position={[0, 0, localZ]}>
-                        
-                        {comp.floors.map((floor) => (
-                            <group key={floor.name} position={[0, floor.yCenter, 0]}>
-                                <Box args={[comp.size, floor.height, comp.size]}>
-                                    <meshStandardMaterial color={comp.isMain ? "#2c3e50" : "#4a90e2"} roughness={0.4} metalness={comp.isMain ? 0 : 0.5} />
-                                </Box>
-                                <lineSegments>
-                                    <edgesGeometry args={[new THREE.BoxGeometry(comp.size, floor.height, comp.size)]} />
-                                    <lineBasicMaterial color="#ffffff" transparent opacity={0.1} />
-                                </lineSegments>
-                                
-                                <Html
-                                    transform
-                                    position={[0, 0, comp.size / 2 + 0.05]}
-                                    style={{
-                                        color: '#e0e0e0',
-                                        fontWeight: 'bold',
-                                        fontSize: '10px',
-                                        pointerEvents: 'none',
-                                        textShadow: '1px 1px 2px black',
-                                        whiteSpace: 'nowrap',
-                                    }}
-                                >
-                                    {floor.name}
-                                </Html>
-                            </group>
-                        ))}
 
+                        {comp.floors.map((floor) => {
+                            const style = getFloorStyle(comp.name, floor.name, comp.isMain);
+                            return (
+                                <group key={floor.name} position={[0, floor.yCenter, 0]}>
+                                    <Box args={[comp.size, floor.height, comp.size]}>
+                                        <meshStandardMaterial color={style.boxColor} roughness={0.4} metalness={style.metalness} />
+                                    </Box>
+                                    <lineSegments>
+                                        <edgesGeometry args={[new THREE.BoxGeometry(comp.size, floor.height, comp.size)]} />
+                                        <lineBasicMaterial color="#ffffff" transparent opacity={0.1} />
+                                    </lineSegments>
+
+                                    <Html
+                                        transform
+                                        position={[0, 0, comp.size / 2 + 0.05]}
+                                        style={{
+                                            color: style.textColor,
+                                            fontWeight: 'bold',
+                                            fontSize: '10px',
+                                            pointerEvents: 'none',
+                                            textShadow: '1px 1px 2px black',
+                                            whiteSpace: 'nowrap',
+                                        }}
+                                    >
+                                        {style.icon}{floor.name}
+                                    </Html>
+                                </group>
+                            );
+                        })}
+
+                        {/* 看板に番号（2つ目以降）を表示 */}
                         <Html
                             transform
                             position={[0, comp.totalHeight + 0.4, comp.size / 2 + 0.05]}
@@ -91,7 +113,7 @@ export const EntityNode3D: React.FC<{
                                 whiteSpace: 'nowrap',
                             }}
                         >
-                            {comp.name}
+                            {comp.name} {compIndex > 0 && `(${compIndex + 1})`}
                         </Html>
 
                         {comp.isMain && entity.state && (

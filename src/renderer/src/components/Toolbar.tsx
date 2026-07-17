@@ -5,12 +5,14 @@ import { engineService } from '../services/engineService'
 interface Props {
   onUpdate: () => void
   isExecuting: boolean
+  showTraceLines: boolean
+  onToggleTraceLines: () => void
 }
 
 type TraceMode = 'off' | 'basic' | 'verbose'
 type MenuName = 'file' | 'scene' | 'engine' | 'trace' | 'window' | null
 
-export const Toolbar: React.FC<Props> = ({ onUpdate, isExecuting }) => {
+export const Toolbar: React.FC<Props> = ({ onUpdate, isExecuting, showTraceLines, onToggleTraceLines }) => {
   const [speedMs, setSpeedMs] = useState(0)
   const [traceMode, setTraceMode] = useState<TraceMode>('verbose')
   const [scriptsDir, setScriptsDir] = useState('')
@@ -156,6 +158,10 @@ export const Toolbar: React.FC<Props> = ({ onUpdate, isExecuting }) => {
                 <button style={checkedItemStyle(traceMode === 'off')} onClick={() => handleTraceChange('off')}><span>{traceMode === 'off' ? '✓' : ''}</span><span>Off</span></button>
                 <button style={checkedItemStyle(traceMode === 'basic')} onClick={() => handleTraceChange('basic')}><span>{traceMode === 'basic' ? '✓' : ''}</span><span>Basic</span></button>
                 <button style={checkedItemStyle(traceMode === 'verbose')} onClick={() => handleTraceChange('verbose')}><span>{traceMode === 'verbose' ? '✓' : ''}</span><span>Verbose</span></button>
+                <div style={styles.separator} />
+                <button style={checkedItemStyle(showTraceLines)} onClick={() => { onToggleTraceLines(); closeMenu(); }}>
+                  <span>{showTraceLines ? '✓' : ''}</span><span>Show Reference Lines</span>
+                </button>
               </div>
             )}
           </div>
@@ -163,7 +169,6 @@ export const Toolbar: React.FC<Props> = ({ onUpdate, isExecuting }) => {
       </div>
 
       <div style={styles.rightStatus}>
-        {/* ★ 移動してきたライブストリーム表示 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginRight: '12px', padding: '2px 8px', backgroundColor: '#2d2d2d', borderRadius: '4px', border: '1px solid #3c3c3c', fontSize: 11 }}>
           <span style={{ color: '#2ecc71', fontSize: '10px' }}>●</span>
           <span>Live Stream (UDP:9090)</span>
