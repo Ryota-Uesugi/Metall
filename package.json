@@ -32,14 +32,12 @@
     },
     "extraResources": [
       {
-        "from": "bin",
-        "to": "bin",
-        "filter": ["**/*"]
+        "from": "D:/Rust/boxing/target/debug/boxing.exe",
+        "to": "bin/boxing.exe"
       },
       {
-        "from": "scripts",
-        "to": "scripts",
-        "filter": ["**/*"]
+        "from": "D:/Rust/boxing/scripts",
+        "to": "scripts"
       }
     ]
   },
